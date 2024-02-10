@@ -1,0 +1,35 @@
+[package]
+name = "rustris"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+members = [
+  "renderer",
+]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+# General
+serde = { version = "1.0.*", features = ["derive"] }
+toml = { version = "0.8.10", features = ["parse"] }
+anyhow = "1.0.79"
+lazy_static = "1.4.0"
+phf = { version = "0.11.2", features = ["macros"] }
+
+# Rendering/Window
+winit = "0.29.10"
+pixels = "0.13.0"
+tiny-skia = "0.11.4"
+
+# Logging
+chrono = "0.4.33"
+log4rs = "1.2.0"
+log = "0.4.20"
+
+# Config file handling
+config = "0.14.0"
+
+# Workspace Crates
+renderer = { path = "renderer" }
