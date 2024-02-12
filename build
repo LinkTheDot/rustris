@@ -1,0 +1,120 @@
+#!/usr/bin/env zsh
+
+build_architecure=$1
+operating_system=$2
+profile=$3
+
+if [ -z $build_architecure ]; then 
+  if [ -z $HOSTTYPE ]; then
+    echo "No provided arcitecture, and no HOSTTYPE variable set."
+
+    return 1;
+  fi
+
+  echo "No provided architecture, defaulting to HOSTTYPE=$HOSTTYPE"
+
+  build_architecure=$HOSTTYPE
+fi
+
+if [ -z $operating_system ]; then 
+  if [ -z $OSTYPE ]; then 
+    echo "Unknown selected operating system, and null OSTYPE environment variable."
+
+    return 1;
+  fi
+
+  echo "No provided operating system, defaulting to current."
+
+  operating_system=$OSTYPE
+fi
+
+if [ -z $profile ]; then 
+  echo "No provided profile, defaulting to debug"
+
+  profile="debug"
+fi
+
+echo ""
+echo "Architecture: $build_architecure"
+echo "Operating system: $operating_system"
+echo "Profile: $profile"
+echo ""
+
+case "$operating_system" in 
+  "linux-gnu" | "linux")
+    echo "Operating system is $operating_system"     
+
+    operating_system="linux"
+
+    program_binary_name="rustris"
+    program_binary_path="./target/$profile/$program_binary_name"
+  ;;
+
+  "windows-gnu" | "windows")
+    echo "Operating system is $operating_system"     
+
+    if [ "$operating_system" = "windows" ]; then 
+      operating_system="windows-gnu"
+    fi
+
+    windows_build="$build_architecure-pc-$operating_system"
+
+    program_binary_name="rustris.exe"
+    program_binary_path="./target/$windows_build/$profile/$program_binary_name"
+  ;;
+
+  *)
+    echo "Unknown selected operating system."
+
+    return 1;
+  ;;
+esac
+
+arguments=()
+
+if [ "$profile" != "debug" ]; then 
+  arguments+="--$profile"
+fi
+
+if [ -n "$windows_build" ]; then 
+  arguments+="--target"
+  arguments+="$windows_build"
+fi
+
+echo "Arguments are: '$arguments'"
+
+if [ -z $arguments ]; then 
+  cargo build;
+else
+  cargo build $arguments;
+fi
+
+if [ $? -ne 0 ]; then
+  echo "Failed to compile rust project"
+
+  return 1;
+fi
+
+if [ "$operating_system" = "windows-gnu" ]; then
+  operating_system="windows"
+fi
+
+binary_destination="./builds/$operating_system"_"$build_architecure/$profile/rustris/"
+
+if [ ! -e "$binary_destination" ]; then
+  echo "Destination '$binary_destination' does not exist."
+
+  return 1;
+fi
+
+if [ ! -e "$program_binary_path" ]; then 
+  echo "Program binary doesn't exist in the target. Path: '$program_binary_path'"
+
+  return 1;
+fi
+
+echo "Copying $program_binary_path -> $binary_destination"
+
+cp $program_binary_path $binary_destination
+
+return 0;
