@@ -42,12 +42,13 @@ echo ""
 
 case "$operating_system" in 
   "linux-gnu" | "linux")
-    echo "Operating system is $operating_system"     
+    # echo "Operating system is $operating_system"     
+    # operating_system="linux"
+    # program_binary_name="rustris"
+    # program_binary_path="./target/$profile/$program_binary_name"
+    echo "Operating system is linux, not doing anything."
 
-    operating_system="linux"
-
-    program_binary_name="rustris"
-    program_binary_path="./target/$profile/$program_binary_name"
+    return 0;
   ;;
 
   "windows-gnu" | "windows")

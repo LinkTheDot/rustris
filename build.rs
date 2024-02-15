@@ -1,3 +1,6 @@
+extern crate git2;
+
+use git2::*;
 use std::env;
 use std::fs::DirBuilder;
 use std::path::Path;
@@ -22,7 +25,19 @@ fn main() -> StdResult<()> {
     BUILD_DIR, build_operation_system, build_architecture, build_level
   );
 
-  handle_file_creation(&build_path)?;
+  if build_level.trim().to_lowercase() == "debug" {
+    println!("cargo:rustc-env=RUST_LOG=debug");
+  } else {
+    println!("cargo:rustc-env=RUST_LOG=info");
+  }
+
+  if build_operation_system.contains("windows") {
+    handle_file_creation(&build_path)?;
+  }
+
+  let latest_commit_sha = get_commit_sha()?;
+
+  println!("cargo:rustc-env=LATEST_COMMIT_SHA={}", latest_commit_sha);
 
   Ok(())
 }
@@ -36,13 +51,14 @@ fn handle_file_creation<P: AsRef<Path>>(build_path: P) -> StdResult<()> {
   Ok(())
 }
 
-// Settings file creation for later reference.
-// This should live in the code since it needs opening and checked at runtime anyways.
-//
-// let settings_file_path = Path::new("settings.toml");
-// if !settings_file_path.exists() {
-//   create_settings_file(settings_file_path)?;
-// }
-// OpenOptions::new()
-//   .create_new(true)
-//   .open(settings_file_path.as_ref())?;
+fn get_commit_sha() -> StdResult<String> {
+  let repo_path = ".";
+
+  let repo = Repository::open(repo_path)?;
+  let head = repo.head()?;
+  let latest_commit = head.peel_to_commit()?;
+
+  println!("Latest commit SHA: {}", latest_commit.id());
+
+  Ok(latest_commit.id().to_string())
+}

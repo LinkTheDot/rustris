@@ -20,6 +20,7 @@ toml = { version = "0.8.10", features = ["parse"] }
 anyhow = "1.0.79"
 lazy_static = "1.4.0"
 phf = { version = "0.11.2", features = ["macros"] }
+image = "0.24.8"
 
 # Rendering/Window
 winit = "0.29.10"
@@ -29,7 +30,7 @@ tiny-skia = "0.11.4"
 
 # Logging
 chrono = "0.4.33"
-log4rs = "1.2.0"
+env_logger = "0.11.2"
 log = "0.4.20"
 
 # Config file handling
@@ -37,3 +38,6 @@ config = "0.14.0"
 
 # Workspace Crates
 renderer = { path = "renderer" }
+
+[build-dependencies]
+git2 = "0.18.2"
