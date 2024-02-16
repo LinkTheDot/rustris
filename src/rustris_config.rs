@@ -64,8 +64,8 @@ impl RustrisConfig {
     let mut game_settings = self.settings;
     let mut input = WinitInputHelper::new();
 
-    let image_one = image::open("assets/test_image_physical.png")?;
-    let image_two = image::open("assets/test_image_transparent.png")?;
+    // let image_one = image::open("assets/test_image_physical.png")?;
+    // let image_two = image::open("assets/test_image_transparent.png")?;
 
     renderer.set_color([0, 0xFF, 0]);
 

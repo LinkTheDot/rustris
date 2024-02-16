@@ -25,11 +25,17 @@ fn main() -> StdResult<()> {
     BUILD_DIR, build_operation_system, build_architecture, build_level
   );
 
-  if build_level.trim().to_lowercase() == "debug" {
-    println!("cargo:rustc-env=RUST_LOG=debug");
-  } else {
-    println!("cargo:rustc-env=RUST_LOG=info");
-  }
+  match build_level.to_lowercase().trim() {
+    "debug" => {
+      println!("cargo:rustc-env=LOG_LEVEL=debug");
+      println!("cargo:rustc-env=LOG_FORMAT='longest'");
+    }
+
+    _ => {
+      println!("cargo:rustc-env=LOG_LEVEL=info");
+      println!("cargo:rustc-env=LOG_FORMAT='short'");
+    }
+  };
 
   if build_operation_system.contains("windows") {
     handle_file_creation(&build_path)?;

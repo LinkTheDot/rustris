@@ -1,12 +1,11 @@
-// use crate::CONFIG;
-// use chrono::Utc;
-// use log::{LevelFilter, SetLoggerError};
-// use log4rs::{
-//   append::file::FileAppender,
-//   config::{Appender, Config, Root},
-//   encode::pattern::PatternEncoder,
-// };
-//
+use chrono::Utc;
+use log::LevelFilter;
+use log4rs::{
+  append::file::FileAppender,
+  config::{Appender, Config, Root},
+  encode::pattern::PatternEncoder,
+};
+use std::str::FromStr;
 
 const LATEST_COMMIT_SHA: &str = env!("LATEST_COMMIT_SHA");
 
@@ -20,73 +19,38 @@ const LATEST_COMMIT_SHA: &str = env!("LATEST_COMMIT_SHA");
 /// long: "(Hour:Minute:Second)(TimeZone) | FilePath: Line | Level - Message".
 /// short: "FilePath: Line | Level - Message".
 /// shortest: Level - "Message"
-// TODO: List the errors.
 #[cfg(not(tarpaulin_include))]
-pub fn setup_file_logger() -> anyhow::Result<()> {
-  panic!("sha: {:?}", LATEST_COMMIT_SHA);
-  // let date = Utc::now();
-  // let log_file_path = format!("logs/{date}").replace(' ', "-");
-  //
-  // let logging_format = get_logging_format();
-  // let log_level = get_log_level();
-  //
-  // let logfile = FileAppender::builder()
-  //   .encoder(Box::new(PatternEncoder::new(&logging_format)))
-  //   .build(log_file_path)
-  //   .unwrap();
-  //
-  // let config = Config::builder()
-  //   .appender(Appender::builder().build("logfile", Box::new(logfile)))
-  //   .build(Root::builder().appender("logfile").build(log_level))
-  //   .unwrap();
-  //
-  // log4rs::init_config(config)
-  todo!()
+pub fn setup_file_logger() -> Result<log4rs::Handle, Box<dyn std::error::Error>> {
+  let date = Utc::now().to_string().replace(':', " ");
+  let log_file_path = format!("logs/{date}").replace(' ', "-");
+  let logging_format = get_logging_format();
+  let log_level = LevelFilter::from_str(env!("LOG_LEVEL")).unwrap_or(LevelFilter::Info);
+
+  let logfile = FileAppender::builder()
+    .encoder(Box::new(PatternEncoder::new(&logging_format)))
+    .build(log_file_path)?;
+
+  let config = Config::builder()
+    .appender(Appender::builder().build("logfile", Box::new(logfile)))
+    .build(Root::builder().appender("logfile").build(log_level))?;
+
+  log::warn!(
+    "This build is: {}\n",
+    LATEST_COMMIT_SHA.chars().take(10).collect::<String>()
+  );
+
+  log4rs::init_config(config).map_err(Into::into)
 }
-//
-// fn get_log_level() -> LevelFilter {
-//   match CONFIG.log_level.to_lowercase().trim() {
-//     "trace" => LevelFilter::Trace,
-//     "info" => LevelFilter::Info,
-//     "error" => LevelFilter::Error,
-//     "warn" => LevelFilter::Warn,
-//     "debug" => LevelFilter::Debug,
-//     _ => LevelFilter::Off,
-//   }
-// }
-//
-// /// To get the list of possible fields refer to the docs listed below:
-// /// https://docs.rs/log4rs/1.2.0/log4rs/encode/pattern/index.html#formatters
-// fn get_logging_format() -> String {
-//   let logging_format = match CONFIG.log_file_message_size.to_lowercase().trim() {
-//     "long" => "{d(%H:%M:%S %Z)(utc)} | {f}: {L} | {l} - {m}\n",
-//     "short" => "{f}: {L} - {l} - {m}\n",
-//     "shortest" => "{m}\n",
-//     _ => "{d(%H:%M:%S %Z)(utc)} | {f}: {L} | {l} - {m}\n",
-//   };
-//
-//   logging_format.to_string()
-// }
-//
-// #[cfg(test)]
-// mod tests {
-//   use super::*;
-//
-//   #[test]
-//   fn get_log_level_expected_default() {
-//     let log_level = get_log_level();
-//
-//     let expected_default_log_level = LevelFilter::Debug;
-//
-//     assert_eq!(log_level, expected_default_log_level);
-//   }
-//
-//   #[test]
-//   fn get_logging_format_expected_default() {
-//     let logging_format = get_logging_format();
-//
-//     let expected = "{d(%H:%M:%S %Z)(utc)} | {f}: {L} | {l} - {m}\n";
-//
-//     assert_eq!(logging_format, expected);
-//   }
-// }
+
+/// To get the list of possible fields refer to the docs listed below:
+/// https://docs.rs/log4rs/1.2.0/log4rs/encode/pattern/index.html#formatters
+fn get_logging_format() -> String {
+  let logging_format = match env!("LOG_FORMAT").to_lowercase().trim() {
+    "long" => "{d(%H:%M:%S %Z)(utc)} | {f}: {L} | {l} - {m}\n",
+    "short" => "{d(%H:%M:%S %Z)(utc)} | {l} - {m}\n",
+    "shortest" => "{m}\n",
+    _ => "{d(%H:%M:%S %Z)(utc)} | {l} - {m}\n",
+  };
+
+  logging_format.to_string()
+}
