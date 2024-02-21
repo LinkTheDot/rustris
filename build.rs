@@ -10,11 +10,14 @@ const BUILD_DIR: &str = "builds/";
 
 type StdResult<T> = Result<T, Box<dyn std::error::Error>>;
 
-// | config.toml (stored in the binary)
-// |- rustris/       (created if it doesn't exist)
-// |-- rustris       (the executable, configured to place in Rustris directory)
-// |-- settings.toml (created on runtime)
-// |-- data.bin      (created on runtime)
+// | ./
+// |- builds/
+// |-- OS_ARCH/
+// |--- profile/
+// |---- rustris/
+// |----- rustris       (the executable, configured to place in Rustris directory)
+// |----- settings.toml (created on runtime)
+// |----- data.bin      (created on runtime)
 
 fn main() -> StdResult<()> {
   let build_architecture = env::var("CARGO_CFG_TARGET_ARCH")?;
@@ -27,13 +30,13 @@ fn main() -> StdResult<()> {
 
   match build_level.to_lowercase().trim() {
     "debug" => {
-      println!("cargo:rustc-env=LOG_LEVEL=debug");
-      println!("cargo:rustc-env=LOG_FORMAT='longest'");
+      set_env_variable_if_doesnt_exist("LOG_LEVEL", "debug");
+      set_env_variable_if_doesnt_exist("LOG_FORMAT", "longest");
     }
 
     _ => {
-      println!("cargo:rustc-env=LOG_LEVEL=info");
-      println!("cargo:rustc-env=LOG_FORMAT='short'");
+      set_env_variable_if_doesnt_exist("LOG_LEVEL", "info");
+      set_env_variable_if_doesnt_exist("LOG_FORMAT", "short");
     }
   };
 
@@ -67,4 +70,10 @@ fn get_commit_sha() -> StdResult<String> {
   println!("Latest commit SHA: {}", latest_commit.id());
 
   Ok(latest_commit.id().to_string())
+}
+
+fn set_env_variable_if_doesnt_exist(environment_variable: &str, value: &str) {
+  if env::var(environment_variable).is_err() {
+    println!("cargo:rustc-env={}={}", environment_variable, value);
+  }
 }

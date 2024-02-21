@@ -6,7 +6,7 @@ use winit::dpi::Pixel;
 use winit::dpi::*;
 
 pub struct Renderer {
-  pixels: Pixels,
+  pub pixels: Pixels,
 }
 
 impl Renderer {
@@ -19,16 +19,60 @@ impl Renderer {
     self.pixels.render().map_err(Into::into)
   }
 
+  /// Resizes the internal surface.
+  pub fn resize_surface(&mut self, new_dimensions: PhysicalSize<u32>) -> anyhow::Result<()> {
+    self
+      .pixels
+      .resize_surface(new_dimensions.width.max(1), new_dimensions.height.max(1))
+      .map_err(Into::into)
+  }
+
   /// Replaces every pixel in the buffer with the given color.
-  pub fn set_color(&mut self, rgb: [u8; 3]) {
-    for pixel in self.pixels.frame_mut().chunks_exact_mut(4) {
-      pixel.copy_from_slice(&[0, rgb[0], rgb[1], rgb[2]])
+  pub fn set_color(&mut self, rgb: [u8; 3]) -> anyhow::Result<()> {
+    log::info!("Replacing screen with {:?}", rgb);
+
+    let frame_buffer = self.pixels.frame_mut();
+
+    for pixel in frame_buffer.chunks_exact_mut(4) {
+      pixel.copy_from_slice(&[rgb[0], rgb[1], rgb[2], 0xFF]);
     }
+
+    self.complete_render()
+  }
+
+  pub fn clear(&mut self) -> anyhow::Result<()> {
+    for (iteration, byte) in self.pixels.frame_mut().iter_mut().enumerate() {
+      *byte = if iteration % 4 == 3 { 255 } else { 0 };
+    }
+
+    self.complete_render()
+  }
+
+  pub fn draw_rectangle(
+    // &mut self,
+    buffer: &mut [u8],
+    position: PhysicalPosition<u32>,
+    dimensions: PhysicalSize<u32>,
+    color: [u8; 4],
+    window_dimensions: &PhysicalSize<u32>,
+  ) -> anyhow::Result<()> {
+    let PhysicalSize { width, height } = dimensions;
+
+    let top_left = position.x + (position.y * window_dimensions.width);
+
+    for index in 0..(width * height) {
+      let (x, y) = (index % width, index / width);
+      let window_index = (top_left + x + (y * window_dimensions.width)) as usize;
+
+      Self::draw_at_pixel_literal_with_rgba(buffer, window_index, &color)?;
+    }
+
+    Ok(())
   }
 
   pub fn render_image(
     &mut self,
-    position: LogicalPosition<u32>,
+    position: &LogicalPosition<u32>,
     image: &DynamicImage,
     window_dimensions: &PhysicalSize<u32>,
     scale_factor: &f64,
@@ -51,6 +95,7 @@ impl Renderer {
     } else {
       None
     };
+
     let Some(image_buffer) = scaled_image.as_ref().unwrap_or(image).as_rgba8() else {
       return Err(anyhow!("Failed to read image as rgba8 when rendering."));
     };
@@ -79,11 +124,16 @@ impl Renderer {
   /// The alpha channel is turned into a percentage value from 0-100. The lower this value the more transparent
   /// the given rgb value is when blending.
   #[inline]
-  fn draw_at_pixel_literal_with_rgba(
+  pub fn draw_at_pixel_literal_with_rgba(
     pixel_buffer: &mut [u8],
     literal_pixel_index: usize,
     rgba: &[u8; 4],
   ) -> anyhow::Result<()> {
+    // Alpha is 0, meaning this rgb value is completely transparent.
+    if rgba[3] == 0 {
+      return Ok(());
+    }
+
     let adjusted_pixel_index = literal_pixel_index * 4;
     let pixel_buffer_length = pixel_buffer.len();
 
@@ -95,14 +145,12 @@ impl Renderer {
       ));
     }
 
-    // Get the last 3 bytes of the pixel, as the first byte is useless data here.
-    let pixel_color = &mut pixel_buffer[(adjusted_pixel_index + 1)..(adjusted_pixel_index + 4)];
+    // Get the first 3 bytes of the pixel, as the last bytes if the alpha channel.
+    let pixel_color = &mut pixel_buffer[(adjusted_pixel_index)..(adjusted_pixel_index + 3)];
 
     if rgba[3] == 255 {
       pixel_color.copy_from_slice(&rgba[0..3]);
 
-      return Ok(());
-    } else if rgba[3] == 0 {
       return Ok(());
     }
 
@@ -124,7 +172,7 @@ impl Renderer {
   }
 
   #[inline]
-  fn draw_at_pixel_literal_with_rgb(
+  pub fn draw_at_pixel_literal_with_rgb(
     pixel_buffer: &mut [u8],
     literal_pixel_index: usize,
     rgb: &[u8; 3],
@@ -140,8 +188,8 @@ impl Renderer {
       ));
     }
 
-    // Get the last 3 bytes of the pixel, as the first byte is useless data here.
-    let pixel_color = &mut pixel_buffer[(adjusted_pixel_index + 1)..(adjusted_pixel_index + 4)];
+    // Get the first 3 bytes of the pixel, as the last bytes if the alpha channel.
+    let pixel_color = &mut pixel_buffer[(adjusted_pixel_index)..(adjusted_pixel_index + 3)];
 
     pixel_color.copy_from_slice(rgb);
 
@@ -158,10 +206,10 @@ mod tests {
 
     #[test]
     fn literal_rgb_applies_correct_alpha_channel() {
-      let mut pixel_buffer = [0, 0x77, 0x77, 0x77];
+      let mut pixel_buffer = [0x77, 0x77, 0x77, 0xFF];
       let rgb = [0xFF, 0xFF, 0xFF];
 
-      let expected_pixel_buffer = [0, 0xFF, 0xFF, 0xFF];
+      let expected_pixel_buffer = [0xFF, 0xFF, 0xFF, 0xFF];
 
       Renderer::draw_at_pixel_literal_with_rgb(&mut pixel_buffer, 0, &rgb).unwrap();
 
@@ -171,18 +219,18 @@ mod tests {
     #[test]
     fn modifies_correct_index() {
       let mut pixel_buffer = [
-        0, 0xFF, 0xFF, 0xFF, //
-        0, 0xFF, 0xFF, 0xFF, //
-        0, 0xFF, 0xFF, 0xFF, //
-        0, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, //
+        0xFF, 0xFF, 0xFF, 0xFF, //
+        0xFF, 0xFF, 0xFF, 0xFF, //
+        0xFF, 0xFF, 0xFF, 0xFF,
       ];
       let replacement_color = [0x77, 0x77, 0x77, 0xFF];
 
       let expected_pixel_buffer = [
-        0, 0x77, 0x77, 0x77, //
-        0, 0xFF, 0xFF, 0xFF, //
-        0, 0x77, 0x77, 0x77, //
-        0, 0xFF, 0xFF, 0xFF,
+        0x77, 0x77, 0x77, 0xFF, //
+        0xFF, 0xFF, 0xFF, 0xFF, //
+        0x77, 0x77, 0x77, 0xFF, //
+        0xFF, 0xFF, 0xFF, 0xFF,
       ];
 
       Renderer::draw_at_pixel_literal_with_rgba(&mut pixel_buffer, 0, &replacement_color).unwrap();
@@ -195,7 +243,7 @@ mod tests {
 
     #[test]
     fn alpha_blending_works_when_drawing() {
-      let mut pixel_buffer = [0, 0x77, 0x77, 0x77];
+      let mut pixel_buffer = [0x77, 0x77, 0x77, 0xFF];
       let blending_rgba = [0xFF, 0xFF, 0xFF, 0x7F];
 
       // BlendedColor = ((alpha_percent * top_color) / 100) + ((alpha_percent * bottom_color) / 100)
@@ -209,16 +257,16 @@ mod tests {
 
       assert_eq!(
         pixel_buffer,
-        [0, expected_color, expected_color, expected_color]
+        [expected_color, expected_color, expected_color, 0xFF]
       );
     }
 
     #[test]
     fn full_alpha_replaces_entire_color() {
-      let mut pixel_buffer = [0, 0x77, 0x77, 0x77];
+      let mut pixel_buffer = [0x77, 0x77, 0x77, 0xFF];
       let rgba = [0xFF, 0xFF, 0xFF, 0xFF];
 
-      let expected_color = [0, 0xFF, 0xFF, 0xFF];
+      let expected_color = [0xFF, 0xFF, 0xFF, 0xFF];
 
       Renderer::draw_at_pixel_literal_with_rgba(&mut pixel_buffer, 0, &rgba).unwrap();
 
@@ -227,8 +275,8 @@ mod tests {
 
     #[test]
     fn zeroed_alpha_channel_does_nothing_to_color() {
-      let mut pixel_buffer = [0, 0x77, 0x77, 0x77];
-      let rgba = [0xFF, 0xFF, 0xFF, 0x00];
+      let mut pixel_buffer = [0x77, 0x77, 0x77, 0xFF];
+      let rgba = [0xFF, 0xFF, 0xFF, 0];
 
       let expected_color = pixel_buffer;
 

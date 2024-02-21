@@ -21,12 +21,12 @@ anyhow = "1.0.79"
 lazy_static = "1.4.0"
 phf = { version = "0.11.2", features = ["macros"] }
 image = "0.24.8"
+game-loop = { version = "1.1.0", features = ["winit"] }
 
 # Rendering/Window
-winit = "0.29.10"
+winit = { version = "0.29.10", features = ["rwh_05"] }
 winit_input_helper = "0.15.3"
 pixels = "0.13.0"
-tiny-skia = "0.11.4"
 
 # Logging
 chrono = "0.4.33"

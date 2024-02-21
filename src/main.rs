@@ -1,7 +1,7 @@
 use rustris::rustris_config::RustrisConfig;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-  let config = RustrisConfig::new()?;
+  let (config, event_loop) = RustrisConfig::new()?;
 
-  config.run().map_err(Into::into)
+  config.run(event_loop).map_err(Into::into)
 }

@@ -21,8 +21,8 @@ const LATEST_COMMIT_SHA: &str = env!("LATEST_COMMIT_SHA");
 /// shortest: Level - "Message"
 #[cfg(not(tarpaulin_include))]
 pub fn setup_file_logger() -> Result<log4rs::Handle, Box<dyn std::error::Error>> {
-  let date = Utc::now().to_string().replace(':', " ");
-  let log_file_path = format!("logs/{date}").replace(' ', "-");
+  let date = Utc::now().to_string().replace(':', "-");
+  let log_file_path = format!("logs/{date}.log").replace(' ', "-");
   let logging_format = get_logging_format();
   let log_level = LevelFilter::from_str(env!("LOG_LEVEL")).unwrap_or(LevelFilter::Info);
 

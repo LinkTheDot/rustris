@@ -3,6 +3,7 @@
 build_architecure=$1
 operating_system=$2
 profile=$3
+final_destination=$4
 
 if [ -z $build_architecure ]; then 
   if [ -z $HOSTTYPE ]; then
@@ -117,5 +118,14 @@ fi
 echo "Copying $program_binary_path -> $binary_destination"
 
 cp $program_binary_path $binary_destination
+
+if [ ! -z $final_destination ]; then 
+  if [ -e "$final_destination" ]; then
+    echo "Copying ./builds/$operating_system"_"$build_architecure/$profile/rustris -> $final_destination"
+    cp -r "./builds/$operating_system"_"$build_architecure/$profile/rustris" "$final_destination"
+  else
+    echo "Couldn't copy directory to $final_destination, as it does not exist."
+  fi
+fi
 
 return 0;
