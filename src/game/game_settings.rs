@@ -19,8 +19,10 @@ impl GameSettings {
   }
 
   /// The current set fps.
+  ///
+  /// Clamped to 20, 144.
   pub fn fps(&self) -> u32 {
-    self.fps.clamp(1, 144)
+    self.fps.clamp(20, 144)
   }
 }
 

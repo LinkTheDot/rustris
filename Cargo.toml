@@ -15,26 +15,26 @@ members = [
 
 [dependencies]
 # General
-serde = { version = "1.0.*", features = ["derive"] }
-toml = { version = "0.8.10", features = ["parse"] }
+# serde = { version = "1.0.*", features = ["derive"] }
+# toml = { version = "0.8.10", features = ["parse"] }
+# config = "0.14.0"
 anyhow = "1.0.79"
 lazy_static = "1.4.0"
-phf = { version = "0.11.2", features = ["macros"] }
-image = "0.24.8"
+maplit = "1.0.2"
 game-loop = { version = "1.1.0", features = ["winit"] }
+arcstr = "1.1.5"
+
 
 # Rendering/Window
 winit = { version = "0.29.10", features = ["rwh_05"] }
 winit_input_helper = "0.15.3"
 pixels = "0.13.0"
+image = "0.24.8"
 
 # Logging
 chrono = "0.4.33"
 log4rs = "1.3.0"
 log = "0.4.20"
-
-# Config file handling
-config = "0.14.0"
 
 # Workspace Crates
 renderer = { path = "renderer" }

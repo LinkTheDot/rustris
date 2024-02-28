@@ -27,3 +27,16 @@ impl Add for winit::dpi::PhysicalPosition<u32> {
     }
   }
 }
+
+pub trait Mul {
+  fn multiply(&self, other: u32) -> Self;
+}
+
+impl Mul for winit::dpi::LogicalSize<u32> {
+  fn multiply(&self, other: u32) -> Self {
+    Self {
+      width: self.width * other,
+      height: self.height * other,
+    }
+  }
+}

@@ -1,12 +1,13 @@
+#![no_std]
+#![forbid(unsafe_code)]
+
 use anyhow::anyhow;
-use image::imageops::FilterType;
 use image::DynamicImage;
 use pixels::Pixels;
-use winit::dpi::Pixel;
 use winit::dpi::*;
 
 pub struct Renderer {
-  pub pixels: Pixels,
+  pixels: Pixels,
 }
 
 impl Renderer {
@@ -29,15 +30,14 @@ impl Renderer {
 
   /// Replaces every pixel in the buffer with the given color.
   pub fn set_color(&mut self, rgb: [u8; 3]) -> anyhow::Result<()> {
-    log::info!("Replacing screen with {:?}", rgb);
-
-    let frame_buffer = self.pixels.frame_mut();
-
-    for pixel in frame_buffer.chunks_exact_mut(4) {
-      pixel.copy_from_slice(&[rgb[0], rgb[1], rgb[2], 0xFF]);
+    for (iteration, byte) in self.pixels.frame_mut().iter_mut().enumerate() {
+      *byte = match iteration % 4 {
+        3 => 255,
+        n => rgb[2 - n],
+      };
     }
 
-    self.complete_render()
+    Ok(())
   }
 
   pub fn clear(&mut self) -> anyhow::Result<()> {
@@ -45,26 +45,49 @@ impl Renderer {
       *byte = if iteration % 4 == 3 { 255 } else { 0 };
     }
 
-    self.complete_render()
+    Ok(())
+  }
+
+  /// Applies the color with the given alpha to every pixel on the screen.
+  pub fn apply_color(&mut self, rgba: [u8; 4]) -> anyhow::Result<()> {
+    let buffer = self.pixels.frame_mut();
+    let pixel_count = buffer.len() / 4;
+
+    for index in 0..pixel_count {
+      Self::draw_at_pixel_with_rgba(buffer, index, &rgba)?;
+    }
+
+    Ok(())
+  }
+
+  /// Returns a mutable reference to the frame buffer.
+  pub fn frame_mut(&mut self) -> &mut [u8] {
+    self.pixels.frame_mut()
+  }
+
+  /// Returns a reference to the frame buffer.
+  pub fn frame(&self) -> &[u8] {
+    self.pixels.frame()
   }
 
   pub fn draw_rectangle(
-    // &mut self,
-    buffer: &mut [u8],
-    position: PhysicalPosition<u32>,
-    dimensions: PhysicalSize<u32>,
+    &mut self,
+    position: &LogicalPosition<u32>,
+    dimensions: &LogicalSize<u32>,
     color: [u8; 4],
-    window_dimensions: &PhysicalSize<u32>,
+    buffer_dimensions: &LogicalSize<u32>,
   ) -> anyhow::Result<()> {
-    let PhysicalSize { width, height } = dimensions;
+    let buffer = self.pixels.frame_mut();
 
-    let top_left = position.x + (position.y * window_dimensions.width);
+    let LogicalSize { width, height } = dimensions;
+
+    let top_left = position.x + (position.y * buffer_dimensions.width);
 
     for index in 0..(width * height) {
       let (x, y) = (index % width, index / width);
-      let window_index = (top_left + x + (y * window_dimensions.width)) as usize;
+      let window_index = (top_left + x + (y * buffer_dimensions.width)) as usize;
 
-      Self::draw_at_pixel_literal_with_rgba(buffer, window_index, &color)?;
+      Self::draw_at_pixel_with_rgba(buffer, window_index, &color)?;
     }
 
     Ok(())
@@ -72,36 +95,19 @@ impl Renderer {
 
   pub fn render_image(
     &mut self,
-    position: &LogicalPosition<u32>,
+    offset: &LogicalPosition<u32>,
     image: &DynamicImage,
-    window_dimensions: &PhysicalSize<u32>,
-    scale_factor: &f64,
+    window_dimensions: &LogicalSize<u32>,
   ) -> anyhow::Result<()> {
-    // Nearest, Triangle, CatmullRom, Gaussian, Lanczos3
-    const SCALE_TYPE: FilterType = FilterType::Gaussian;
+    let image_width = image.width();
+    let image_height = image.height();
 
-    let mut image_width = image.width();
-    let mut image_height = image.height();
-
-    let scaled_image = if scale_factor != &1.0_f64 {
-      image_width = (image_width as f64 * scale_factor).cast::<u32>();
-      image_height = (image_height as f64 * scale_factor).cast::<u32>();
-
-      Some(image.resize(
-        (image_width as f64 * scale_factor).cast::<u32>(),
-        (image_height as f64 * scale_factor).cast::<u32>(),
-        SCALE_TYPE,
-      ))
-    } else {
-      None
-    };
-
-    let Some(image_buffer) = scaled_image.as_ref().unwrap_or(image).as_rgba8() else {
+    let Some(image_buffer) = image.as_rgba8() else {
       return Err(anyhow!("Failed to read image as rgba8 when rendering."));
     };
 
     let frame_buffer = self.pixels.frame_mut();
-    let position = position.to_physical::<u32>(*scale_factor);
+    let position = offset;
     let top_left = position.x + (position.y * window_dimensions.width);
     let image_buffer = image_buffer.chunks_exact(4);
 
@@ -110,23 +116,24 @@ impl Renderer {
       let (x, y) = (index % image_width, index / image_width);
       let buffer_index = (top_left + x + (y * window_dimensions.width)) as usize;
 
-      Self::draw_at_pixel_literal_with_rgba(frame_buffer, buffer_index, rgba)?
+      Self::draw_at_pixel_with_rgba(frame_buffer, buffer_index, rgba)?
     }
 
     Ok(())
   }
 
-  /// Draws at the literal pixel in the frame buffer.
+  /// Draws at the pixel in the frame buffer.
   ///
-  /// The frame buffer is an array of u8, where every chunk of 4 is an actual pixel. This method allows for
-  /// easier indexing into this buffer for modifying those actual pixels.
+  /// This method allows for easier calculating for the index into this buffer.
+  /// The frame buffer is an array of u8, where every chunk of 4 is an actual pixel.
+  /// The index passed in will point to the actual pixel desired.
   ///
   /// The alpha channel is turned into a percentage value from 0-100. The lower this value the more transparent
   /// the given rgb value is when blending.
   #[inline]
-  pub fn draw_at_pixel_literal_with_rgba(
+  pub fn draw_at_pixel_with_rgba(
     pixel_buffer: &mut [u8],
-    literal_pixel_index: usize,
+    pixel_index: usize,
     rgba: &[u8; 4],
   ) -> anyhow::Result<()> {
     // Alpha is 0, meaning this rgb value is completely transparent.
@@ -134,7 +141,7 @@ impl Renderer {
       return Ok(());
     }
 
-    let adjusted_pixel_index = literal_pixel_index * 4;
+    let adjusted_pixel_index = pixel_index * 4;
     let pixel_buffer_length = pixel_buffer.len();
 
     if pixel_buffer_length < adjusted_pixel_index + 4 {
@@ -171,13 +178,18 @@ impl Renderer {
     Ok(())
   }
 
+  /// Draws at the pixel in the frame buffer.
+  ///
+  /// This method allows for easier calculating for the index into this buffer.
+  /// The frame buffer is an array of u8, where every chunk of 4 is an actual pixel.
+  /// The index passed in will point to the actual pixel desired.
   #[inline]
-  pub fn draw_at_pixel_literal_with_rgb(
+  pub fn draw_at_pixel_with_rgb(
     pixel_buffer: &mut [u8],
-    literal_pixel_index: usize,
+    pixel_index: usize,
     rgb: &[u8; 3],
   ) -> anyhow::Result<()> {
-    let adjusted_pixel_index = literal_pixel_index * 4;
+    let adjusted_pixel_index = pixel_index * 4;
     let pixel_buffer_length = pixel_buffer.len();
 
     if pixel_buffer_length < adjusted_pixel_index + 4 {
@@ -201,17 +213,17 @@ impl Renderer {
 mod tests {
   use super::*;
 
-  mod draw_at_pixel_literal_logic {
+  mod draw_at_pixel_logic {
     use super::*;
 
     #[test]
-    fn literal_rgb_applies_correct_alpha_channel() {
+    fn rgb_applies_correct_alpha_channel() {
       let mut pixel_buffer = [0x77, 0x77, 0x77, 0xFF];
       let rgb = [0xFF, 0xFF, 0xFF];
 
       let expected_pixel_buffer = [0xFF, 0xFF, 0xFF, 0xFF];
 
-      Renderer::draw_at_pixel_literal_with_rgb(&mut pixel_buffer, 0, &rgb).unwrap();
+      Renderer::draw_at_pixel_with_rgb(&mut pixel_buffer, 0, &rgb).unwrap();
 
       assert_eq!(pixel_buffer, expected_pixel_buffer);
     }
@@ -233,10 +245,8 @@ mod tests {
         0xFF, 0xFF, 0xFF, 0xFF,
       ];
 
-      Renderer::draw_at_pixel_literal_with_rgba(&mut pixel_buffer, 0, &replacement_color).unwrap();
-      println!("buffer inbetween: {:?}", pixel_buffer);
-      Renderer::draw_at_pixel_literal_with_rgba(&mut pixel_buffer, 2, &replacement_color).unwrap();
-      println!("buffer after: {:?}", pixel_buffer);
+      Renderer::draw_at_pixel_with_rgba(&mut pixel_buffer, 0, &replacement_color).unwrap();
+      Renderer::draw_at_pixel_with_rgba(&mut pixel_buffer, 2, &replacement_color).unwrap();
 
       assert_eq!(pixel_buffer, expected_pixel_buffer);
     }
@@ -253,7 +263,7 @@ mod tests {
       let expected_color =
         (((alpha_percentage * top_color) / 100) + ((alpha_percentage * bottom_color) / 100)) as u8;
 
-      Renderer::draw_at_pixel_literal_with_rgba(&mut pixel_buffer, 0, &blending_rgba).unwrap();
+      Renderer::draw_at_pixel_with_rgba(&mut pixel_buffer, 0, &blending_rgba).unwrap();
 
       assert_eq!(
         pixel_buffer,
@@ -268,7 +278,7 @@ mod tests {
 
       let expected_color = [0xFF, 0xFF, 0xFF, 0xFF];
 
-      Renderer::draw_at_pixel_literal_with_rgba(&mut pixel_buffer, 0, &rgba).unwrap();
+      Renderer::draw_at_pixel_with_rgba(&mut pixel_buffer, 0, &rgba).unwrap();
 
       assert_eq!(pixel_buffer, expected_color);
     }
@@ -280,7 +290,7 @@ mod tests {
 
       let expected_color = pixel_buffer;
 
-      Renderer::draw_at_pixel_literal_with_rgba(&mut pixel_buffer, 0, &rgba).unwrap();
+      Renderer::draw_at_pixel_with_rgba(&mut pixel_buffer, 0, &rgba).unwrap();
 
       assert_eq!(pixel_buffer, expected_color);
     }
