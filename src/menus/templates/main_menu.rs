@@ -43,13 +43,3 @@ impl From<MainMenuOptions> for MenuOption {
     MenuOption::new(item)
   }
 }
-
-impl From<MainMenuOptions> for &'static str {
-  fn from(item: MainMenuOptions) -> &'static str {
-    match item {
-      MainMenuOptions::Start => "start_v2",
-      MainMenuOptions::Options => "",
-      MainMenuOptions::Exit => "",
-    }
-  }
-}

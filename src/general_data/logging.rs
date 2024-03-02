@@ -5,9 +5,9 @@ use log4rs::{
   config::{Appender, Config, Root},
   encode::pattern::PatternEncoder,
 };
-use std::str::FromStr;
+// use std::str::FromStr;
 
-const LATEST_COMMIT_SHA: &str = env!("LATEST_COMMIT_SHA");
+// const LATEST_COMMIT_SHA: &str = env!("LATEST_COMMIT_SHA");
 
 /// Creates a new log file in "crate/logs/".
 /// The new log file will be named after the current time and date based on UTC.
@@ -24,7 +24,8 @@ pub fn setup_file_logger() -> Result<log4rs::Handle, Box<dyn std::error::Error>>
   let date = Utc::now().to_string().replace(':', "-");
   let log_file_path = format!("logs/{date}.log").replace(' ', "-");
   let logging_format = get_logging_format();
-  let log_level = LevelFilter::from_str(env!("LOG_LEVEL")).unwrap_or(LevelFilter::Info);
+  // let log_level = LevelFilter::from_str(env!("LOG_LEVEL")).unwrap_or(LevelFilter::Info);
+  let log_level = LevelFilter::Info;
 
   let logfile = FileAppender::builder()
     .encoder(Box::new(PatternEncoder::new(&logging_format)))
@@ -34,10 +35,10 @@ pub fn setup_file_logger() -> Result<log4rs::Handle, Box<dyn std::error::Error>>
     .appender(Appender::builder().build("logfile", Box::new(logfile)))
     .build(Root::builder().appender("logfile").build(log_level))?;
 
-  log::warn!(
-    "This build is: {}\n",
-    LATEST_COMMIT_SHA.chars().take(10).collect::<String>()
-  );
+  // log::warn!(
+  //   "This build is: {}\n",
+  //   LATEST_COMMIT_SHA.chars().take(10).collect::<String>()
+  // );
 
   log4rs::init_config(config).map_err(Into::into)
 }
@@ -45,7 +46,8 @@ pub fn setup_file_logger() -> Result<log4rs::Handle, Box<dyn std::error::Error>>
 /// To get the list of possible fields refer to the docs listed below:
 /// https://docs.rs/log4rs/1.2.0/log4rs/encode/pattern/index.html#formatters
 fn get_logging_format() -> String {
-  let logging_format = match env!("LOG_FORMAT").to_lowercase().trim() {
+  // let logging_format = match env!("LOG_FORMAT").to_lowercase().trim() {
+  let logging_format = match "short" {
     "long" => "{d(%H:%M:%S %Z)(utc)} | {f}: {L} | {l} - {m}\n",
     "short" => "{d(%H:%M:%S %Z)(utc)} | {l} - {m}\n",
     "shortest" => "{m}\n",

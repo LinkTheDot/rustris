@@ -1,18 +1,29 @@
-#![no_std]
 #![forbid(unsafe_code)]
 
 use anyhow::anyhow;
+use fontdue::Font;
 use image::DynamicImage;
 use pixels::Pixels;
 use winit::dpi::*;
 
+use self::fonts::TextBox;
+
+pub mod fonts;
+
 pub struct Renderer {
   pixels: Pixels,
+
+  loaded_fonts: Vec<Font>,
+  font_layout_by_name: Vec<&'static str>,
 }
 
 impl Renderer {
   pub fn new(pixels: Pixels) -> Self {
-    Self { pixels }
+    Self {
+      pixels,
+      loaded_fonts: Vec::with_capacity(2),
+      font_layout_by_name: Vec::with_capacity(2),
+    }
   }
 
   /// Calls `.render()` on the contained pixels::Pixels.
@@ -79,15 +90,19 @@ impl Renderer {
   ) -> anyhow::Result<()> {
     let buffer = self.pixels.frame_mut();
 
-    let LogicalSize { width, height } = dimensions;
+    let LogicalSize {
+      width: rectangle_width,
+      height: rectangle_height,
+    } = dimensions;
 
-    let top_left = position.x + (position.y * buffer_dimensions.width);
+    let top_left_placement = position.x + (position.y * buffer_dimensions.width);
 
-    for index in 0..(width * height) {
-      let (x, y) = (index % width, index / width);
-      let window_index = (top_left + x + (y * buffer_dimensions.width)) as usize;
+    for index in 0..(rectangle_width * rectangle_height) {
+      let window_index = top_left_placement
+        + (index % rectangle_width)
+        + ((index / rectangle_width) * buffer_dimensions.width);
 
-      Self::draw_at_pixel_with_rgba(buffer, window_index, &color)?;
+      Self::draw_at_pixel_with_rgba(buffer, window_index as usize, &color)?;
     }
 
     Ok(())
@@ -120,6 +135,111 @@ impl Renderer {
     }
 
     Ok(())
+  }
+
+  /// Loads a font into memory from a font file's bytes.
+  ///
+  /// Stored in a list, [`render_font()`](Renderer::render_font) uses the index of these stored fonts.
+  /// The index is in the order by which the fonts were loaded.
+  pub fn load_font_from_bytes(
+    &mut self,
+    font_data: &[u8],
+    font_name: &'static str,
+  ) -> anyhow::Result<()> {
+    let font = match Font::from_bytes(font_data, fontdue::FontSettings::default()) {
+      Ok(font) => font,
+      Err(error) => return Err(anyhow!("Failed to load the font: `{:?}`", error)),
+    };
+
+    self.loaded_fonts.push(font);
+    self.font_layout_by_name.push(font_name);
+
+    Ok(())
+  }
+
+  /// Renders the text for the given [`TextBox`](crate::renderer::fonts::TextBox).
+  pub fn render_text_box(
+    &mut self,
+    text_box: &TextBox,
+    color: [u8; 4],
+    buffer_dimensions: &LogicalSize<u32>,
+  ) -> anyhow::Result<()> {
+    let Some(font_index) = text_box.font_index() else {
+      log::warn!("Attempted to render an empty text box.");
+
+      return Ok(());
+    };
+    let position = text_box.position().unwrap();
+
+    let Some(font) = self.loaded_fonts.get(font_index) else {
+      return Err(anyhow!(
+        "Attempted to load a font that didn't exist. Index: {}, Font count: {}",
+        font_index,
+        self.loaded_fonts.len()
+      ));
+    };
+
+    let buffer = self.pixels.frame_mut();
+    let top_left_placement = position.x + (position.y * buffer_dimensions.width);
+
+    let result: anyhow::Result<()> = text_box.character_data().iter().try_for_each(|glyph| {
+      log::debug!("Rendering {:?}", glyph.parent);
+
+      if !glyph.parent.is_ascii() {
+        return Err(anyhow!(
+          "Attempted to render a non-ascii character: `{:?}`",
+          glyph.parent
+        ));
+      }
+
+      let (metadata, bitmap) = font.rasterize(glyph.parent, glyph.key.px);
+      let (text_width, text_height) = (glyph.width as u32, metadata.height as u32);
+
+      log::debug!("dimensions: {}x{}", text_width, text_height);
+      log::debug!("Metadata: {:#?}", metadata);
+
+      for index in 0..(text_width * text_height) {
+        let position = top_left_placement
+          + glyph.x.cast::<u32>()
+          + (glyph.y.cast::<u32>() * buffer_dimensions.width);
+
+        let shade_percentage = (bitmap[index as usize] as u16 * 100) / 255;
+
+        if shade_percentage == 0 {
+          continue;
+        }
+
+        let color = [
+          ((color[0] as u16 * shade_percentage) / 100).min(255) as u8,
+          ((color[1] as u16 * shade_percentage) / 100).min(255) as u8,
+          ((color[2] as u16 * shade_percentage) / 100).min(255) as u8,
+          color[3],
+        ];
+
+        Self::draw_at_pixel_with_rgba(buffer, position as usize, &color)?;
+      }
+
+      Ok(())
+    });
+
+    if let Err(error) = result {
+      return Err(anyhow!("Failed to render the text. `{:?}`", error));
+    }
+
+    Ok(())
+  }
+
+  pub fn fonts(&self) -> &Vec<Font> {
+    &self.loaded_fonts
+  }
+
+  pub fn fonts_with_names(&self) -> Vec<(&'static str, &Font)> {
+    self
+      .font_layout_by_name
+      .iter()
+      .zip(self.loaded_fonts.iter())
+      .map(|(font_name, font)| (*font_name, font))
+      .collect()
   }
 
   /// Draws at the pixel in the frame buffer.

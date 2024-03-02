@@ -1,8 +1,8 @@
 pub use crate::menus::menu_option::*;
-use crate::{asset_loader::ASSETS, rustris_config::RENDERED_WINDOW_DIMENSIONS};
+use crate::renderer::*;
+use crate::{asset_loader::Assets, rustris_config::RENDERED_WINDOW_DIMENSIONS};
 use anyhow::anyhow;
 use image::GenericImageView;
-use renderer::*;
 use winit::dpi::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -111,6 +111,7 @@ impl Menu {
   /// The option_spacing is the gap between each option in pixels, not the space between the center of each image.
   pub fn render(
     &self,
+    assets: &Assets,
     position: &LogicalPosition<i32>,
     renderer: &mut Renderer,
     option_spacing: u32,
@@ -118,7 +119,7 @@ impl Menu {
     let mut previous_option_bottom = position.y as u32;
 
     for menu_option in self.options.iter() {
-      let Some(image_asset) = ASSETS.get(menu_option.asset_name()) else {
+      let Some(image_asset) = assets.get_image(menu_option.asset_name()) else {
         return Err(anyhow!("Failed to load asset {}", menu_option.asset_name()));
       };
       let (image_width, image_height) = image_asset.dimensions();

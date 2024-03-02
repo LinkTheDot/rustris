@@ -1,14 +1,13 @@
 use super::actions::{MenuAction, PlayerAction};
 use super::minos::MinoType;
-use crate::asset_loader::ASSETS;
+use crate::asset_loader::Assets;
 use crate::game::world_state::*;
 use crate::menus::menu_data::*;
 use crate::menus::templates::main_menu::*;
+use crate::renderer::Renderer;
 use crate::rustris_config::RENDERED_WINDOW_DIMENSIONS;
 use anyhow::anyhow;
-use image::GenericImageView;
 use maplit::hashmap;
-use renderer::Renderer;
 use std::collections::HashMap;
 use winit::dpi::*;
 
@@ -105,13 +104,13 @@ impl WorldData {
     Ok(())
   }
 
-  pub fn render(&self, renderer: &mut Renderer) -> anyhow::Result<()> {
+  pub fn render(&self, assets: &Assets, renderer: &mut Renderer) -> anyhow::Result<()> {
     match self.current_state {
       WorldState::Menu => {
         let current_menu_name = self.current_menu.unwrap_or("main_menu");
 
         match current_menu_name {
-          "main_menu" => self.render_main_menu(renderer)?,
+          "main_menu" => self.render_main_menu(assets, renderer)?,
           "options" => self.render_options(renderer)?,
           "pause_menu" => {
             self.render_game(renderer)?;
@@ -135,42 +134,37 @@ impl WorldData {
   }
 
   #[allow(unused_labels)]
-  fn render_main_menu(&self, renderer: &mut Renderer) -> anyhow::Result<()> {
-    /// The spacing between each menu option in pixels.
-    ///
-    /// This is the size of the gap, not the position from center to center.
-    const OPTION_SPACE: u32 = 20;
+  fn render_main_menu(&self, assets: &Assets, renderer: &mut Renderer) -> anyhow::Result<()> {
+    // 'draw_background: {
+    let pixel_buffer = renderer.frame_mut();
+    let buffer_dimensions = RENDERED_WINDOW_DIMENSIONS;
+    let pixel_count = buffer_dimensions.width * buffer_dimensions.height;
 
-    // Temporary gradient shader for the background.
-    'draw_background: {
-      let pixel_buffer = renderer.frame_mut();
-      let buffer_dimensions = RENDERED_WINDOW_DIMENSIONS;
-      let pixel_count = buffer_dimensions.width * buffer_dimensions.height;
+    for index in 0..pixel_count {
+      let (x, y) = (
+        index % buffer_dimensions.width,
+        index / buffer_dimensions.height,
+      );
 
-      for index in 0..pixel_count {
-        let (x, y) = (
-          index % buffer_dimensions.width,
-          index / buffer_dimensions.height,
-        );
+      let x_percentage = x as f64 / buffer_dimensions.width as f64;
+      let y_percentage = y as f64 / buffer_dimensions.height as f64;
 
-        let x_percentage = x as f64 / buffer_dimensions.width as f64;
-        let y_percentage = y as f64 / buffer_dimensions.height as f64;
+      let red = (255.0 * y_percentage).cast::<u8>();
+      let blue = (255.0 * x_percentage).cast::<u8>();
 
-        let red = (255.0 * y_percentage).cast::<u8>();
-        let blue = (255.0 * x_percentage).cast::<u8>();
-
-        Renderer::draw_at_pixel_with_rgb(pixel_buffer, index as usize, &[red, 0, blue])?;
-      }
+      Renderer::draw_at_pixel_with_rgb(pixel_buffer, index as usize, &[red, 0, blue])?;
     }
+    // }
 
     let menu_position = LogicalPosition {
       x: 0,
       y: (RENDERED_WINDOW_DIMENSIONS.height as f32 * 0.25).cast::<i32>(),
     };
+    let option_spacing = 20; // pixels.
 
     let current_menu = self.current_menu()?;
 
-    current_menu.render(&menu_position, renderer, OPTION_SPACE)
+    current_menu.render(assets, &menu_position, renderer, option_spacing)
   }
 
   fn render_options(&self, _renderer: &mut Renderer) -> anyhow::Result<()> {
