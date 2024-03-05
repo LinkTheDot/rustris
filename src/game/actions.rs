@@ -1,6 +1,5 @@
-use winit::keyboard::KeyCode;
-
 use super::world_state::WorldState;
+use winit::keyboard::KeyCode;
 
 /// The variations of player actions depending on the environment.
 ///

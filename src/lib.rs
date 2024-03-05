@@ -19,7 +19,7 @@ pub mod menus {
   }
 
   pub mod menu_data;
-  pub mod menu_option;
+  pub mod menu_items;
 }
 
 pub mod renderer;

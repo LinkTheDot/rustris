@@ -3,6 +3,7 @@ use super::minos::MinoType;
 use crate::asset_loader::Assets;
 use crate::game::world_state::*;
 use crate::menus::menu_data::*;
+use crate::menus::templates::game_settings::Settings;
 use crate::menus::templates::main_menu::*;
 use crate::renderer::Renderer;
 use crate::rustris_config::RENDERED_WINDOW_DIMENSIONS;
@@ -33,7 +34,10 @@ impl WorldData {
   #[allow(clippy::new_without_default)]
   pub fn new() -> Self {
     let menus = hashmap! {
-      "main_menu" => MAIN_MENU.clone(),
+      MainMenu::MENU_NAME => MainMenu::new_menu(),
+      Settings::GENERAL_SETTINGS_NAME => Settings::general_settings_menu(),
+      Settings::GAME_CONTROLS_NAME => Settings::game_controls_menu(),
+      Settings::MENU_CONTROLS_NAME => Settings::menu_controls_menu(),
     };
 
     Self {
@@ -42,7 +46,7 @@ impl WorldData {
       held: None,
       board: vec![None; Self::LOGICAL_BOARD_WIDTH as usize * Self::LOGICAL_BOARD_HEIGHT as usize],
 
-      current_menu: Some("main_menu"),
+      current_menu: Some(MainMenu::MENU_NAME),
       menus,
     }
   }

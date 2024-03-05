@@ -1,45 +1,24 @@
-use crate::menus::menu_data::*;
-use lazy_static::lazy_static;
+use crate::{
+  define_menu_items,
+  menus::{menu_data::Menu, menu_items::*},
+};
 
-lazy_static! {
-  pub static ref MAIN_MENU: Menu = {
-    let options = vec![
-      MainMenuOptions::Start,
-      MainMenuOptions::Options,
-      MainMenuOptions::Exit,
-    ];
+pub struct MainMenu;
 
-    Menu::new("main_menu", options)
-  };
-}
+impl MainMenu {
+  pub const MENU_NAME: &'static str = "main_menu";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MainMenuOptions {
-  Start,
-  Options,
-  Exit,
-}
+  pub fn new_menu() -> Menu {
+    let menu_name = Self::MENU_NAME;
 
-impl MenuOptionData for MainMenuOptions {
-  fn asset_name(&self) -> &'static str {
-    match self {
-      MainMenuOptions::Start => "menu_start_v2",
-      MainMenuOptions::Options => "menu_options",
-      MainMenuOptions::Exit => "menu_exit",
-    }
-  }
-
-  fn option_name(&self) -> &'static str {
-    match self {
-      MainMenuOptions::Start => "start",
-      MainMenuOptions::Options => "options",
-      MainMenuOptions::Exit => "exit",
-    }
+    Menu::new::<MainMenuItems>(menu_name)
   }
 }
 
-impl From<MainMenuOptions> for MenuOption {
-  fn from(item: MainMenuOptions) -> MenuOption {
-    MenuOption::new(item)
+define_menu_items! {
+  pub enum MainMenuItems {
+    Start(item_name = "start", asset_name = "menu_start_v2"),
+    Options(item_name = "options", asset_name = "menu_options"),
+    Exit(item_name = "exit", asset_name = "menu_exit"),
   }
 }

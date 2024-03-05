@@ -1,39 +1,26 @@
-pub use crate::menus::menu_option::*;
+pub use crate::menus::menu_items::*;
 use crate::renderer::*;
 use crate::{asset_loader::Assets, rustris_config::RENDERED_WINDOW_DIMENSIONS};
 use anyhow::anyhow;
 use image::GenericImageView;
 use winit::dpi::*;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct Menu {
   name: &'static str,
   /// The index for which option is currently selected.
   selected: usize,
-  options: Vec<MenuOption>,
-}
-
-/// This trait will label the options for a menu.
-///
-/// Each option will have a way to convert into the name of its button asset.
-pub trait MenuOptionData: Into<MenuOption> {
-  fn asset_name(&self) -> &'static str {
-    "unknown"
-  }
-
-  fn option_name(&self) -> &'static str {
-    "unknown"
-  }
+  options: Vec<MenuItem>,
 }
 
 impl Menu {
   /// Creates a new menu from a list of options.
   ///
-  /// Each option will implement [`MenuOptionData`](MenuOptionData).
+  /// Each option will implement [`MenuItemData`](crate::menus::menu_items::MenuItemData).
   /// This will force each option to know its name, and what asset it's tied to.
   /// This allows for better organization of the possible options in a menu.
-  pub fn new(name: &'static str, options: Vec<impl MenuOptionData>) -> Self {
-    let options: Vec<MenuOption> = options.into_iter().map(Into::into).collect();
+  pub fn new<M: MenuItemData>(name: &'static str) -> Self {
+    let options = M::full_list();
 
     Self {
       name,
@@ -86,7 +73,7 @@ impl Menu {
   /// Returns the currently selected menu option.
   ///
   /// Returns None if the list is empty.
-  pub fn current_option(&self) -> Option<&MenuOption> {
+  pub fn current_option(&self) -> Option<&MenuItem> {
     if self.options.is_empty() {
       return None;
     }
@@ -100,7 +87,7 @@ impl Menu {
         self.options.len()
       );
 
-      return self.options.get(0);
+      return self.options.first();
     }
 
     selected_option
@@ -142,112 +129,37 @@ impl Menu {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use test_data::*;
 
-  mod menu_option_data_trait_tests {
-    use super::test_data::*;
-    use super::*;
+  #[test]
+  fn cursor_moves_as_expected() {
+    let mut menu = Menu::new::<TestMenu>("test_menu");
 
-    #[test]
-    fn defaults_return_expected_values() {
-      let default_options = DefaultMenu::First;
+    let expected_options: Vec<MenuItem> = TestMenu::full_list();
 
-      let expected_name = "unknown";
+    menu.next();
+    assert_eq!(menu.current_option(), expected_options.get(1));
+    menu.next();
+    assert_eq!(menu.current_option(), expected_options.get(2));
+    // Wrap back to 0
+    menu.next();
+    assert_eq!(menu.current_option(), expected_options.first());
 
-      assert_eq!(default_options.option_name(), expected_name);
-      assert_eq!(default_options.asset_name(), expected_name);
-    }
-
-    #[test]
-    fn non_default_returns_expected() {
-      let options = TestMenu::Start;
-
-      let expected_option_name = "start";
-      let expected_asset_name = "start_asset";
-
-      assert_eq!(options.option_name(), expected_option_name);
-      assert_eq!(options.asset_name(), expected_asset_name);
-    }
-
-    #[test]
-    fn cursor_moves_as_expected() {
-      let options = vec![TestMenu::Start, TestMenu::Options, TestMenu::Exit];
-      let mut menu = Menu::new("test_menu", options.clone());
-
-      let expected_options: Vec<MenuOption> = options.into_iter().map(MenuOption::from).collect();
-
-      menu.next();
-      assert_eq!(menu.current_option(), expected_options.get(1));
-      menu.next();
-      assert_eq!(menu.current_option(), expected_options.get(2));
-      // Wrap back to 0
-      menu.next();
-      assert_eq!(menu.current_option(), expected_options.get(0));
-
-      // Wrap back to last item in the list.
-      menu.previous();
-      assert_eq!(menu.current_option(), expected_options.get(2));
-    }
-
-    #[test]
-    fn empty_list_returns_no_item() {
-      let options: Vec<TestMenu> = vec![];
-      let mut menu = Menu::new("test_menu", options);
-
-      assert!(menu.current_option().is_none());
-
-      menu.next();
-      assert!(menu.selected == 0);
-
-      menu.previous();
-      assert!(menu.selected == 0);
-    }
+    // Wrap back to last item in the list.
+    menu.previous();
+    assert_eq!(menu.current_option(), expected_options.get(2));
   }
 
   mod test_data {
     use super::*;
+    use crate::define_menu_items;
 
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    pub enum TestMenu {
-      Start,
-      Options,
-      Exit,
-    }
-
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    pub enum DefaultMenu {
-      First,
-    }
-
-    impl MenuOptionData for TestMenu {
-      fn asset_name(&self) -> &'static str {
-        match self {
-          TestMenu::Start => "start_asset",
-          TestMenu::Options => "options_asset",
-          TestMenu::Exit => "exit_asset",
-        }
-      }
-
-      fn option_name(&self) -> &'static str {
-        match self {
-          TestMenu::Start => "start",
-          TestMenu::Options => "options",
-          TestMenu::Exit => "exit",
-        }
+    define_menu_items! {
+      pub enum TestMenu {
+        Start(item_name = "start", asset_name = "start_asset"),
+        Options(item_name = "options", asset_name = "options_asset"),
+        Exit(item_name = "exit", asset_name = "exit_asset"),
       }
     }
-
-    impl From<TestMenu> for MenuOption {
-      fn from(item: TestMenu) -> MenuOption {
-        MenuOption::new(item)
-      }
-    }
-
-    impl From<DefaultMenu> for MenuOption {
-      fn from(item: DefaultMenu) -> MenuOption {
-        MenuOption::new(item)
-      }
-    }
-
-    impl MenuOptionData for DefaultMenu {}
   }
 }
