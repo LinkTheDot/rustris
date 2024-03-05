@@ -5,6 +5,27 @@ use anyhow::anyhow;
 use image::GenericImageView;
 use winit::dpi::*;
 
+/// Creating a menu is best done through the [`define_menu_items`](crate::define_menu_items) macro.
+/// This macro will easily define every item in a menu, and its corresponding asset.
+///
+/// ```
+/// use rustris::define_menu_items;
+/// use rustris::menus::menu_data::*;
+///
+/// define_menu_items! {
+///   pub enum MyMenu {
+///     ItemOne(item_name = "item_one", asset_name = "item_one_menu_image"),
+///   }
+/// }
+///
+/// let menu_name = "my_menu";
+/// let menu = Menu::new::<MyMenu>(menu_name);
+///
+/// let current_option = menu.current_option().unwrap();
+/// let current_option = MyMenu::from_menu_item(current_option);
+///
+/// assert_eq!(current_option, Some(MyMenu::ItemOne))
+/// ```
 #[derive(Debug, Clone)]
 pub struct Menu {
   name: &'static str,

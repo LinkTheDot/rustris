@@ -22,15 +22,26 @@ impl MenuItem {
 ///
 /// Each item will have a way to convert into the name of its button asset.
 pub trait MenuItemData {
+  /// Gets the name of an individual menu item.
   fn item_name(&self) -> &'static str {
     "unknown"
   }
 
+  /// Gets the name of the asset for an individual menu item.
+  /// The list of assets can be found in the [`asset_loader`](crate::asset_loader) module
   fn asset_name(&self) -> &'static str {
     "unknown"
   }
 
+  /// Returns the list of every possible menu item in order, converted into [`MenuItem`](MenuItem)s
   fn full_list() -> Vec<MenuItem>;
+
+  /// Converts an instance of [`MenuItem`](MenuItem) into Self.
+  ///
+  /// None is returned if the name of the MenuItem does not match any item_names under Self.
+  fn from_menu_item(item: &MenuItem) -> Option<Self>
+  where
+    Self: Sized;
 }
 
 /// Defines the creation of an enum that can be used to create a [`Menu`](crate::menus::menu_data::Menu).
@@ -40,6 +51,7 @@ pub trait MenuItemData {
 ///
 /// ```
 /// use rustris::define_menu_items;
+/// use rustris::menus::menu_data::*;
 ///
 /// define_menu_items! {
 ///   pub enum MainMenu {
@@ -92,6 +104,14 @@ macro_rules! define_menu_items {
           $($crate::menus::menu_items::MenuItem::from(&$name::$variant)),*,
         ]
       }
+
+      fn from_menu_item(item: &$crate::menus::menu_items::MenuItem) -> Option<$name> {
+        [
+          $($name::$variant),*,
+        ]
+        .into_iter()
+        .find(|menu_item| menu_item.item_name() == item.name())
+      }
     }
 
     impl From<&$name> for $crate::menus::menu_items::MenuItem {
@@ -105,6 +125,13 @@ macro_rules! define_menu_items {
         menu_item.item_name()
       }
     }
+
+    impl From<$name> for &'static str {
+      fn from(menu_item: $name) -> &'static str {
+        menu_item.item_name()
+      }
+    }
+
   };
 }
 
