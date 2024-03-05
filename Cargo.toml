@@ -6,23 +6,15 @@ edition = "2021"
 [build]
 build = "build.rs"
 
-[workspace]
-members = [
-  "renderer",
-]
-
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 # General
-# serde = { version = "1.0.*", features = ["derive"] }
-# toml = { version = "0.8.10", features = ["parse"] }
-# config = "0.14.0"
 anyhow = "1.0.79"
 lazy_static = "1.4.0"
 maplit = "1.0.2"
 game-loop = { version = "1.1.0", features = ["winit"] }
-arcstr = "1.1.5"
+fontdue = "0.8.0"
 
 
 # Rendering/Window
@@ -35,9 +27,6 @@ image = "0.24.8"
 chrono = "0.4.33"
 log4rs = "1.3.0"
 log = "0.4.20"
-
-# Workspace Crates
-renderer = { path = "renderer" }
 
 [build-dependencies]
 git2 = "0.18.2"

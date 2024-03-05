@@ -14,12 +14,15 @@ pub mod game {
 
 pub mod menus {
   pub mod templates {
+    pub mod game_settings;
     pub mod main_menu;
   }
 
   pub mod menu_data;
-  pub mod menu_option;
+  pub mod menu_items;
 }
+
+pub mod renderer;
 
 pub mod asset_loader;
 pub mod rustris_config;

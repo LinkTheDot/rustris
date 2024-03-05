@@ -1,8 +1,12 @@
+use crate::asset_loader::Assets;
 use crate::game::{actions::*, game_settings::GameSettings, world_data::WorldData};
 use crate::general_data::winit_traits::*;
+use crate::renderer::fonts::TextBox;
+use crate::renderer::Renderer;
+use anyhow::anyhow;
 use game_loop::{game_loop, GameLoop, Time, TimeTrait};
 use pixels::{Pixels, SurfaceTexture};
-use renderer::Renderer;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use winit::window::{Window, WindowBuilder};
@@ -15,8 +19,10 @@ pub struct RustrisConfig {
   world_data: WorldData,
   player_action: Option<PlayerAction>,
   renderer: Renderer,
+  text_boxes: HashMap<&'static str, TextBox>,
   settings: GameSettings,
   input: WinitInputHelper,
+  assets: Assets,
 }
 
 impl RustrisConfig {
@@ -50,15 +56,47 @@ impl RustrisConfig {
     let game = WorldData::new();
     let renderer = Renderer::new(pixels);
 
-    let rustris_config = Self {
+    let assets = Assets::load_assets();
+
+    let mut rustris_config = Self {
       world_data: game,
       player_action: None,
       renderer,
+      text_boxes: HashMap::with_capacity(5),
       settings,
       input,
+      assets,
     };
 
+    rustris_config.load_fonts()?;
+    rustris_config.load_default_text_boxes();
+
     Ok((rustris_config, event_loop, window))
+  }
+
+  fn load_fonts(&mut self) -> anyhow::Result<()> {
+    self
+      .assets
+      .font_assets()
+      .iter()
+      .try_for_each(|(font_name, font_bytes)| {
+        self.renderer.load_font_from_bytes(font_bytes, font_name)
+      })
+  }
+
+  /// Temporary until I think of a better way of doing this.
+  fn load_default_text_boxes(&mut self) {
+    let test_text_box_position = LogicalPosition::new(0, 0);
+    let test_text_box_name = "test";
+    let test_text_box = TextBox::new(
+      &self.renderer,
+      0,
+      "FOX FOX FOX",
+      &test_text_box_position,
+      32.0,
+    );
+
+    let _ = self.text_boxes.insert(test_text_box_name, test_text_box);
   }
 
   pub fn run(self, event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()> {
@@ -109,7 +147,7 @@ impl RustrisConfig {
     if let Err(error) = game_loop
       .game
       .world_data
-      .render(&mut game_loop.game.renderer)
+      .render(&game_loop.game.assets, &mut game_loop.game.renderer)
     {
       log::error!("Failed to render the game world: `{:?}`", error);
     }
@@ -180,7 +218,6 @@ impl RustrisConfig {
       let input = &self.input;
 
       let keys_pressed: Vec<KeyCode> = TEMP_VALID_KEYS
-        .to_owned()
         .iter()
         .filter_map(|key| input.key_pressed(*key).then_some(*key))
         .collect();
