@@ -152,18 +152,6 @@ impl RustrisConfig {
       log::error!("Failed to render the game world: `{:?}`", error);
     }
 
-    let text_box = game_loop.game.text_boxes.get("test").unwrap();
-    let text_box_color = [0x00, 0xFF, 0x00, 0xFF];
-
-    if let Err(error) =
-      game_loop
-        .game
-        .renderer
-        .render_text_box(text_box, text_box_color, &RENDERED_WINDOW_DIMENSIONS)
-    {
-      log::error!("Failed to load font: `{:?}`", error);
-    }
-
     if let Err(error) = game_loop.game.renderer.complete_render() {
       log::error!("Failed to render to the frame buffer. '{:?}'", error);
 

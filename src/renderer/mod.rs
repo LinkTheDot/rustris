@@ -139,7 +139,7 @@ impl Renderer {
 
   /// Loads a font into memory from a font file's bytes.
   ///
-  /// Stored in a list, [`render_font()`](Renderer::render_font) uses the index of these stored fonts.
+  /// Stored in a list, [`render_text_box()`](Renderer::render_text_box) uses the index of these stored fonts.
   /// The index is in the order by which the fonts were loaded.
   pub fn load_font_from_bytes(
     &mut self,
@@ -183,8 +183,6 @@ impl Renderer {
     let top_left_placement = position.x + (position.y * buffer_dimensions.width);
 
     let result: anyhow::Result<()> = text_box.character_data().iter().try_for_each(|glyph| {
-      log::debug!("Rendering {:?}", glyph.parent);
-
       if !glyph.parent.is_ascii() {
         return Err(anyhow!(
           "Attempted to render a non-ascii character: `{:?}`",
@@ -195,13 +193,14 @@ impl Renderer {
       let (metadata, bitmap) = font.rasterize(glyph.parent, glyph.key.px);
       let (text_width, text_height) = (glyph.width as u32, metadata.height as u32);
 
-      log::debug!("dimensions: {}x{}", text_width, text_height);
-      log::debug!("Metadata: {:#?}", metadata);
+      let top_left_placement = top_left_placement
+        + glyph.x.cast::<u32>()
+        + (glyph.y.cast::<u32>() * buffer_dimensions.width);
 
       for index in 0..(text_width * text_height) {
         let position = top_left_placement
-          + glyph.x.cast::<u32>()
-          + (glyph.y.cast::<u32>() * buffer_dimensions.width);
+          + (index % text_width)
+          + ((index / text_width) * buffer_dimensions.width);
 
         let shade_percentage = (bitmap[index as usize] as u16 * 100) / 255;
 
@@ -221,6 +220,8 @@ impl Renderer {
 
       Ok(())
     });
+
+    log::debug!("\n\n\n\n\n\n");
 
     if let Err(error) = result {
       return Err(anyhow!("Failed to render the text. `{:?}`", error));
