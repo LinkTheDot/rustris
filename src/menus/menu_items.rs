@@ -1,16 +1,19 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MenuItem {
-  name: &'static str,
+  item_name: &'static str,
   asset_name: &'static str,
 }
 
 impl MenuItem {
-  pub fn new(name: &'static str, asset_name: &'static str) -> Self {
-    Self { name, asset_name }
+  pub fn new(item_name: &'static str, asset_name: &'static str) -> Self {
+    Self {
+      item_name,
+      asset_name,
+    }
   }
 
-  pub fn name(&self) -> &'static str {
-    self.name
+  pub fn item_name(&self) -> &'static str {
+    self.item_name
   }
 
   pub fn asset_name(&self) -> &'static str {
@@ -22,6 +25,8 @@ impl MenuItem {
 ///
 /// Each item will have a way to convert into the name of its button asset.
 pub trait MenuItemData {
+  const MENU_NAME: &'static str;
+
   /// Gets the name of an individual menu item.
   fn item_name(&self) -> &'static str {
     "unknown"
@@ -70,9 +75,14 @@ pub trait MenuItemData {
 /// Creating a menu will end up looking like this:
 ///
 /// ```ignore,no_run
-/// let menu_name = "main_menu";
+/// let main_menu = Menu::new::<MainMenu>();
+/// ```
 ///
-/// Menu::new::<MainMenu>(menu_name)
+/// To uniquely store an instance of your menu items, you can use the following:
+/// ```ignore,no_run
+/// let mut menu_list: std::collections::HashMap<&'static str, Menu> = std::collections::HashMap::new();
+///
+/// menu_list.insert(MainMenu::MENU_NAME, main_menu);
 /// ```
 #[macro_export]
 macro_rules! define_menu_items {
@@ -87,6 +97,8 @@ macro_rules! define_menu_items {
     }
 
     impl $crate::menus::menu_items::MenuItemData for $name {
+      const MENU_NAME: &'static str = stringify!($name);
+
       fn item_name(&self) -> &'static str {
         match &self {
           $(Self::$variant => $name_value),*,
@@ -110,24 +122,29 @@ macro_rules! define_menu_items {
           $($name::$variant),*,
         ]
         .into_iter()
-        .find(|menu_item| menu_item.item_name() == item.name())
+        .find(|menu_item| menu_item.item_name() == item.item_name())
       }
     }
 
     impl From<&$name> for $crate::menus::menu_items::MenuItem {
       fn from(menu_item: &$name) -> $crate::menus::menu_items::MenuItem {
+        use $crate::menus::menu_items::MenuItemData;
+
         $crate::menus::menu_items::MenuItem::new(menu_item.item_name(), menu_item.asset_name())
       }
     }
 
     impl From<&$name> for &'static str {
       fn from(menu_item: &$name) -> &'static str {
+        use $crate::menus::menu_items::MenuItemData;
+
         menu_item.item_name()
       }
     }
 
     impl From<$name> for &'static str {
       fn from(menu_item: $name) -> &'static str {
+        use $crate::menus::menu_items::MenuItemData;
         menu_item.item_name()
       }
     }
@@ -165,7 +182,6 @@ mod tests {
   }
 
   mod test_data {
-    use super::*;
     use crate::define_menu_items;
 
     define_menu_items! {

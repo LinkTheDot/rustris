@@ -1,19 +1,4 @@
-use crate::{
-  define_menu_items,
-  menus::{menu_data::Menu, menu_items::*},
-};
-
-pub struct MainMenu;
-
-impl MainMenu {
-  pub const MENU_NAME: &'static str = "main_menu";
-
-  pub fn new_menu() -> Menu {
-    let menu_name = Self::MENU_NAME;
-
-    Menu::new::<MainMenuItems>(menu_name)
-  }
-}
+use crate::define_menu_items;
 
 define_menu_items! {
   pub enum MainMenuItems {

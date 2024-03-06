@@ -1,12 +1,9 @@
 use crate::asset_loader::Assets;
 use crate::game::{actions::*, game_settings::GameSettings, world_data::WorldData};
 use crate::general_data::winit_traits::*;
-use crate::renderer::fonts::TextBox;
 use crate::renderer::Renderer;
-use anyhow::anyhow;
 use game_loop::{game_loop, GameLoop, Time, TimeTrait};
 use pixels::{Pixels, SurfaceTexture};
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use winit::window::{Window, WindowBuilder};
@@ -19,7 +16,6 @@ pub struct RustrisConfig {
   world_data: WorldData,
   player_action: Option<PlayerAction>,
   renderer: Renderer,
-  text_boxes: HashMap<&'static str, TextBox>,
   settings: GameSettings,
   input: WinitInputHelper,
   assets: Assets,
@@ -62,14 +58,12 @@ impl RustrisConfig {
       world_data: game,
       player_action: None,
       renderer,
-      text_boxes: HashMap::with_capacity(5),
       settings,
       input,
       assets,
     };
 
     rustris_config.load_fonts()?;
-    rustris_config.load_default_text_boxes();
 
     Ok((rustris_config, event_loop, window))
   }
@@ -82,21 +76,6 @@ impl RustrisConfig {
       .try_for_each(|(font_name, font_bytes)| {
         self.renderer.load_font_from_bytes(font_bytes, font_name)
       })
-  }
-
-  /// Temporary until I think of a better way of doing this.
-  fn load_default_text_boxes(&mut self) {
-    let test_text_box_position = LogicalPosition::new(0, 0);
-    let test_text_box_name = "test";
-    let test_text_box = TextBox::new(
-      &self.renderer,
-      0,
-      "FOX FOX FOX",
-      &test_text_box_position,
-      32.0,
-    );
-
-    let _ = self.text_boxes.insert(test_text_box_name, test_text_box);
   }
 
   pub fn run(self, event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()> {

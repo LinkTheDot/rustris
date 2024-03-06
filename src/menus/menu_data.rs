@@ -18,13 +18,13 @@ use winit::dpi::*;
 ///   }
 /// }
 ///
-/// let menu_name = "my_menu";
-/// let menu = Menu::new::<MyMenu>(menu_name);
+/// let menu = Menu::new::<MyMenu>();
 ///
 /// let current_option = menu.current_option().unwrap();
 /// let current_option = MyMenu::from_menu_item(current_option);
 ///
-/// assert_eq!(current_option, Some(MyMenu::ItemOne))
+/// assert_eq!(current_option, Some(MyMenu::ItemOne));
+/// assert_eq!(MyMenu::MENU_NAME, "MyMenu");
 /// ```
 #[derive(Debug, Clone)]
 pub struct Menu {
@@ -40,8 +40,9 @@ impl Menu {
   /// Each option will implement [`MenuItemData`](crate::menus::menu_items::MenuItemData).
   /// This will force each option to know its name, and what asset it's tied to.
   /// This allows for better organization of the possible options in a menu.
-  pub fn new<M: MenuItemData>(name: &'static str) -> Self {
+  pub fn new<M: MenuItemData>() -> Self {
     let options = M::full_list();
+    let name = M::MENU_NAME;
 
     Self {
       name,
@@ -154,7 +155,7 @@ mod tests {
 
   #[test]
   fn cursor_moves_as_expected() {
-    let mut menu = Menu::new::<TestMenu>("test_menu");
+    let mut menu = Menu::new::<TestMenu>();
 
     let expected_options: Vec<MenuItem> = TestMenu::full_list();
 
@@ -172,7 +173,6 @@ mod tests {
   }
 
   mod test_data {
-    use super::*;
     use crate::define_menu_items;
 
     define_menu_items! {

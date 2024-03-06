@@ -4,7 +4,7 @@
 pub struct GameSettings {
   /// The current set fps.
   fps: u32,
-  controls: Controls,
+  _controls: Controls,
 }
 
 struct Controls {
@@ -13,9 +13,12 @@ struct Controls {
 
 impl GameSettings {
   pub fn initialize() -> anyhow::Result<Self> {
-    let controls = Controls::initialize()?;
+    let _controls = Controls::initialize()?;
 
-    Ok(Self { fps: 144, controls })
+    Ok(Self {
+      fps: 144,
+      _controls,
+    })
   }
 
   /// The current set fps.

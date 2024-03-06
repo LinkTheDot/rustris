@@ -3,8 +3,8 @@ use super::minos::MinoType;
 use crate::asset_loader::Assets;
 use crate::game::world_state::*;
 use crate::menus::menu_data::*;
-use crate::menus::templates::game_settings::Settings;
-use crate::menus::templates::main_menu::*;
+use crate::menus::templates::{game_settings::*, main_menu::*};
+use crate::renderer::fonts::TextBox;
 use crate::renderer::Renderer;
 use crate::rustris_config::RENDERED_WINDOW_DIMENSIONS;
 use anyhow::anyhow;
@@ -23,6 +23,7 @@ pub struct WorldData {
 
   current_menu: Option<&'static str>,
   menus: HashMap<&'static str, Menu>,
+  text_boxes: HashMap<&'static str, TextBox>,
 }
 
 impl WorldData {
@@ -34,10 +35,11 @@ impl WorldData {
   #[allow(clippy::new_without_default)]
   pub fn new() -> Self {
     let menus = hashmap! {
-      MainMenu::MENU_NAME => MainMenu::new_menu(),
-      Settings::GENERAL_SETTINGS_NAME => Settings::general_settings_menu(),
-      Settings::GAME_CONTROLS_NAME => Settings::game_controls_menu(),
-      Settings::MENU_CONTROLS_NAME => Settings::menu_controls_menu(),
+      MainMenuItems::MENU_NAME => Menu::new::<MainMenuItems>(),
+      GeneralSettingsMenuItems::MENU_NAME => Menu::new::<GeneralSettingsMenuItems>(),
+      GameControlsMenu::MENU_NAME => Menu::new::<GameControlsMenu>(),
+      MenuControlsMenuItems::MENU_NAME => Menu::new::<MenuControlsMenuItems>(),
+
     };
 
     Self {
@@ -46,8 +48,9 @@ impl WorldData {
       held: None,
       board: vec![None; Self::LOGICAL_BOARD_WIDTH as usize * Self::LOGICAL_BOARD_HEIGHT as usize],
 
-      current_menu: Some(MainMenu::MENU_NAME),
+      current_menu: Some(MainMenuItems::MENU_NAME),
       menus,
+      text_boxes: HashMap::with_capacity(5),
     }
   }
 
@@ -81,7 +84,7 @@ impl WorldData {
             ));
           };
 
-          match current_option.name() {
+          match current_option.item_name() {
             "start" => self.update_state(WorldState::Game),
             "options" => self.current_menu = Some("options_menu"),
             "exit" => return Ok(true),
