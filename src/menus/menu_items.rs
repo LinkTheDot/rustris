@@ -38,6 +38,12 @@ pub trait MenuItemData {
     "unknown"
   }
 
+  /// The full list of strings for every menu item's name.
+  fn item_name_list() -> Vec<&'static str>;
+
+  /// The full list of strings for every menu item's asset name.
+  fn asset_name_list() -> Vec<&'static str>;
+
   /// Returns the list of every possible menu item in order, converted into [`MenuItem`](MenuItem)s
   fn full_list() -> Vec<MenuItem>;
 
@@ -109,6 +115,18 @@ macro_rules! define_menu_items {
         match &self {
           $(Self::$variant => $asset_value),*,
         }
+      }
+
+      fn item_name_list() -> Vec<&'static str> {
+        vec![
+          $($name_value),*,
+        ]
+      }
+
+      fn asset_name_list() -> Vec<&'static str> {
+        vec![
+          $($asset_value),*,
+        ]
       }
 
       fn full_list() -> Vec<$crate::menus::menu_items::MenuItem> {

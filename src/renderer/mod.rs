@@ -1,29 +1,39 @@
 #![forbid(unsafe_code)]
 
 use anyhow::anyhow;
-use fontdue::Font;
-use image::DynamicImage;
 use pixels::Pixels;
 use winit::dpi::*;
 
-use self::fonts::TextBox;
-
-pub mod fonts;
+pub mod images;
+pub mod renderable;
+pub mod text_boxes;
 
 pub struct Renderer {
   pixels: Pixels,
-
-  loaded_fonts: Vec<Font>,
-  font_layout_by_name: Vec<&'static str>,
+  buffer_dimensions: LogicalSize<u32>,
 }
 
 impl Renderer {
-  pub fn new(pixels: Pixels) -> Self {
-    Self {
-      pixels,
-      loaded_fonts: Vec::with_capacity(2),
-      font_layout_by_name: Vec::with_capacity(2),
+  /// # Errors
+  ///
+  /// - When the passed in buffer_dimensions does not match the actual size of the pixels' buffer
+  pub fn new(pixels: Pixels, buffer_dimensions: LogicalSize<u32>) -> anyhow::Result<Self> {
+    log::info!("Creating renderer.");
+
+    if (pixels.frame().len() / 4)
+      != buffer_dimensions.width as usize * buffer_dimensions.height as usize
+    {
+      return Err(anyhow!(
+        "Frame buffer size does not match passed in buffer_dimensions: `{:?}`. Buffer size: {:?}",
+        buffer_dimensions,
+        pixels.frame().len()
+      ));
     }
+
+    Ok(Self {
+      pixels,
+      buffer_dimensions,
+    })
   }
 
   /// Calls `.render()` on the contained pixels::Pixels.
@@ -81,12 +91,11 @@ impl Renderer {
     self.pixels.frame()
   }
 
-  pub fn draw_rectangle(
+  pub fn filled_rectangle(
     &mut self,
     position: &LogicalPosition<u32>,
     dimensions: &LogicalSize<u32>,
     color: [u8; 4],
-    buffer_dimensions: &LogicalSize<u32>,
   ) -> anyhow::Result<()> {
     let buffer = self.pixels.frame_mut();
 
@@ -95,12 +104,12 @@ impl Renderer {
       height: rectangle_height,
     } = dimensions;
 
-    let top_left_placement = position.x + (position.y * buffer_dimensions.width);
+    let top_left_placement = position.x + (position.y * self.buffer_dimensions.width);
 
     for index in 0..(rectangle_width * rectangle_height) {
       let window_index = top_left_placement
         + (index % rectangle_width)
-        + ((index / rectangle_width) * buffer_dimensions.width);
+        + ((index / rectangle_width) * self.buffer_dimensions.width);
 
       Self::draw_at_pixel_with_rgba(buffer, window_index as usize, &color)?;
     }
@@ -108,139 +117,111 @@ impl Renderer {
     Ok(())
   }
 
-  pub fn render_image(
+  /// Draws a line between the two given points with the Bresenham algorithm implemented by the [`Bresenham`](https://crates.io/crates/bresenham) crate.
+  ///
+  /// # Errors
+  ///
+  /// - If any line has an x or y < 0.
+  /// - Anytime [`draw_at_pixel_with_rgba`](Renderer::draw_at_pixel_with_rgba) errors.
+  pub fn line(
     &mut self,
-    offset: &LogicalPosition<u32>,
-    image: &DynamicImage,
-    window_dimensions: &LogicalSize<u32>,
+    point_one: (isize, isize),
+    point_two: (isize, isize),
+    color: &[u8; 4],
   ) -> anyhow::Result<()> {
-    let image_width = image.width();
-    let image_height = image.height();
+    let buffer_width = self.buffer_dimensions.width as isize;
+    let pixel_buffer = self.frame_mut();
 
-    let Some(image_buffer) = image.as_rgba8() else {
-      return Err(anyhow!("Failed to read image as rgba8 when rendering."));
-    };
-
-    let frame_buffer = self.pixels.frame_mut();
-    let position = offset;
-    let top_left = position.x + (position.y * window_dimensions.width);
-    let image_buffer = image_buffer.chunks_exact(4);
-
-    for (index, rgba) in (0..(image_width * image_height)).zip(image_buffer) {
-      let rgba: &[u8; 4] = rgba.try_into()?;
-      let (x, y) = (index % image_width, index / image_width);
-      let buffer_index = (top_left + x + (y * window_dimensions.width)) as usize;
-
-      Self::draw_at_pixel_with_rgba(frame_buffer, buffer_index, rgba)?
+    if point_one.0 == 0 || point_one.1 == 0 || point_two.0 == 0 || point_two.1 == 0 {
+      return Err(anyhow!(
+        "Attempted to draw a line {:?} -> {:?} which contains a negative integer.",
+        point_one,
+        point_two
+      ));
     }
 
-    Ok(())
-  }
+    bresenham::Bresenham::new(point_one, point_two).try_for_each(|(x, y)| {
+      let index = x + (y * buffer_width);
 
-  /// Loads a font into memory from a font file's bytes.
-  ///
-  /// Stored in a list, [`render_text_box()`](Renderer::render_text_box) uses the index of these stored fonts.
-  /// The index is in the order by which the fonts were loaded.
-  pub fn load_font_from_bytes(
-    &mut self,
-    font_data: &[u8],
-    font_name: &'static str,
-  ) -> anyhow::Result<()> {
-    let font = match Font::from_bytes(font_data, fontdue::FontSettings::default()) {
-      Ok(font) => font,
-      Err(error) => return Err(anyhow!("Failed to load the font: `{:?}`", error)),
-    };
-
-    self.loaded_fonts.push(font);
-    self.font_layout_by_name.push(font_name);
-
-    Ok(())
-  }
-
-  /// Renders the text for the given [`TextBox`](crate::renderer::fonts::TextBox).
-  pub fn render_text_box(
-    &mut self,
-    text_box: &TextBox,
-    color: [u8; 4],
-    buffer_dimensions: &LogicalSize<u32>,
-  ) -> anyhow::Result<()> {
-    let Some(font_index) = text_box.font_index() else {
-      log::warn!("Attempted to render an empty text box.");
-
-      return Ok(());
-    };
-    let position = text_box.position().unwrap();
-
-    let Some(font) = self.loaded_fonts.get(font_index) else {
-      return Err(anyhow!(
-        "Attempted to load a font that didn't exist. Index: {}, Font count: {}",
-        font_index,
-        self.loaded_fonts.len()
-      ));
-    };
-
-    let buffer = self.pixels.frame_mut();
-    let top_left_placement = position.x + (position.y * buffer_dimensions.width);
-
-    let result: anyhow::Result<()> = text_box.character_data().iter().try_for_each(|glyph| {
-      if !glyph.parent.is_ascii() {
+      // Sanity check.
+      if index < 0 {
         return Err(anyhow!(
-          "Attempted to render a non-ascii character: `{:?}`",
-          glyph.parent
+          "Attempted to draw a line index underflow. Index {} < 0",
+          index
         ));
       }
 
-      let (metadata, bitmap) = font.rasterize(glyph.parent, glyph.key.px);
-      let (text_width, text_height) = (glyph.width as u32, metadata.height as u32);
+      let index = index as usize;
 
-      let top_left_placement = top_left_placement
-        + glyph.x.cast::<u32>()
-        + (glyph.y.cast::<u32>() * buffer_dimensions.width);
+      Renderer::draw_at_pixel_with_rgba(pixel_buffer, index, color)
+    })
+  }
 
-      for index in 0..(text_width * text_height) {
-        let position = top_left_placement
-          + (index % text_width)
-          + ((index / text_width) * buffer_dimensions.width);
+  /// Draws the outline of a rectangle with the points given.
+  pub fn bounding_rectangle(
+    &mut self,
+    top_left: (isize, isize),
+    bottom_right: (isize, isize),
+    color: &[u8; 4],
+  ) -> anyhow::Result<()> {
+    let top_right = (bottom_right.0, top_left.1);
+    let bottom_left = (top_left.0, bottom_right.1);
 
-        let shade_percentage = (bitmap[index as usize] as u16 * 100) / 255;
-
-        if shade_percentage == 0 {
-          continue;
-        }
-
-        let color = [
-          ((color[0] as u16 * shade_percentage) / 100).min(255) as u8,
-          ((color[1] as u16 * shade_percentage) / 100).min(255) as u8,
-          ((color[2] as u16 * shade_percentage) / 100).min(255) as u8,
-          color[3],
-        ];
-
-        Self::draw_at_pixel_with_rgba(buffer, position as usize, &color)?;
-      }
-
-      Ok(())
-    });
-
-    log::debug!("\n\n\n\n\n\n");
-
-    if let Err(error) = result {
-      return Err(anyhow!("Failed to render the text. `{:?}`", error));
-    }
+    self.line(top_left, (top_right.0 + 1, top_right.1), color)?;
+    self.line(bottom_right, top_right, color)?;
+    self.line(top_left, (bottom_left.0, bottom_left.1 + 1), color)?;
+    self.line(bottom_right, bottom_left, color)?;
 
     Ok(())
   }
 
-  pub fn fonts(&self) -> &Vec<Font> {
-    &self.loaded_fonts
-  }
+  /// Draws an arrow left or right with the position being the end of the arrow.
+  /// The length will determine how far the wings of the arrow stretch out.
+  pub fn draw_arrow(
+    &mut self,
+    end_position: &LogicalPosition<u32>,
+    length: u32,
+    point_right: bool,
+    color: &[u8; 4],
+  ) -> anyhow::Result<()> {
+    let end_position = LogicalPosition {
+      x: end_position.x as isize,
+      y: end_position.y as isize,
+    };
+    let length = length as isize;
 
-  pub fn fonts_with_names(&self) -> Vec<(&'static str, &Font)> {
-    self
-      .font_layout_by_name
-      .iter()
-      .zip(self.loaded_fonts.iter())
-      .map(|(font_name, font)| (*font_name, font))
-      .collect()
+    let direction_sign = if point_right { -1 } else { 1 };
+
+    let arrow_back = LogicalPosition {
+      x: end_position.x + (length * direction_sign),
+      ..end_position
+    };
+
+    let wingspan = length;
+    let wing_y = end_position.y + (wingspan / 2);
+
+    let wing_end_position = LogicalPosition {
+      x: end_position.x + ((length * direction_sign) / 2),
+      y: wing_y,
+    };
+
+    self.line(
+      (end_position.x, end_position.y),
+      (arrow_back.x, arrow_back.y),
+      color,
+    )?;
+    self.line(
+      (end_position.x, end_position.y),
+      (wing_end_position.x, wing_end_position.y),
+      color,
+    )?;
+    self.line(
+      (end_position.x, end_position.y),
+      (wing_end_position.x, wing_end_position.y - (wingspan)),
+      color,
+    )?;
+
+    Ok(())
   }
 
   /// Draws at the pixel in the frame buffer.

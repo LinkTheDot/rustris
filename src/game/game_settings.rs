@@ -13,6 +13,7 @@ struct Controls {
 
 impl GameSettings {
   pub fn initialize() -> anyhow::Result<Self> {
+    log::info!("Initializing settings.");
     let _controls = Controls::initialize()?;
 
     Ok(Self {

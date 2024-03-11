@@ -40,3 +40,13 @@ impl Mul for winit::dpi::LogicalSize<u32> {
     }
   }
 }
+
+pub trait ToisizeTuple {
+  fn to_isize_tuple(&self) -> (isize, isize);
+}
+
+impl ToisizeTuple for winit::dpi::LogicalPosition<i32> {
+  fn to_isize_tuple(&self) -> (isize, isize) {
+    (self.x as isize, self.y as isize)
+  }
+}

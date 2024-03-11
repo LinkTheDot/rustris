@@ -16,8 +16,13 @@ const DEFAULT_LOG_FORMAT: &str = "short";
 /// The new log file will be named after the current time and date based on UTC.
 /// The name format is as such Y-M-D-H:M:S-UTC or Year-Month-Day-Hour:Minute:Second-TimeZone.
 ///
-/// The format will be configured with the `RUSTRIS_LOG_FORMAT` environment variable.
-/// The logging level will be configured with the `RUSTRIS_LOG_LEVEL` environment variable.
+/// The format will be configured first with `RUSTRIS_LOG_FORMAT` environment variable.
+/// If that doesn't exist, `LOG_FORMAT` will be used.
+/// If that doesn't exist, the default will be `short`.
+///
+/// The logging level will be configured with the `RUSTRIS_LOG_LEVEL` environment variablem.
+/// If that doesn't exist, `LOG_LEVEL will be use.
+/// If that doesn't exist, the default is `info`.
 ///
 /// long: "(Hour:Minute:Second)(TimeZone) | FilePath: Line | Level - Message".
 /// short: "FilePath: Line | Level - Message".
@@ -57,7 +62,13 @@ fn get_logging_level() -> anyhow::Result<LevelFilter> {
 /// To get the list of possible fields refer to the docs listed below:
 /// https://docs.rs/log4rs/1.2.0/log4rs/encode/pattern/index.html#formatters
 fn get_logging_format() -> String {
-  let format_level = env::var("RUSTRIS_LOG_FORMAT").unwrap_or(DEFAULT_LOG_FORMAT.to_string());
+  let format_level = if let Ok(format_level) = env::var("RUSTRIS_LOG_FORMAT") {
+    format_level
+  } else if let Ok(format_level) = env::var("LOG_FORMAT") {
+    format_level
+  } else {
+    DEFAULT_LOG_FORMAT.to_string()
+  };
 
   match format_level.trim() {
     "long" => "{d(%H:%M:%S %Z)(utc)} | {f}: {L} | {l} - {m}\n",
