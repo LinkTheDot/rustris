@@ -1,4 +1,3 @@
-use crate::asset_loader::Assets;
 use crate::game::{actions::*, game_settings::GameSettings, world_data::WorldData};
 use crate::general_data::winit_traits::*;
 use crate::renderer::Renderer;
@@ -18,7 +17,6 @@ pub struct RustrisConfig {
   renderer: Renderer,
   settings: GameSettings,
   input: WinitInputHelper,
-  assets: Assets,
 }
 
 impl RustrisConfig {
@@ -47,35 +45,23 @@ impl RustrisConfig {
     )?;
 
     let settings = GameSettings::initialize()?;
+
+    log::info!("Creating WinitInputHelper.");
     let input = WinitInputHelper::new();
 
-    let game = WorldData::new();
-    let renderer = Renderer::new(pixels);
+    let renderer = Renderer::new(pixels, RENDERED_WINDOW_DIMENSIONS)?;
+    let world_data = WorldData::new();
 
-    let assets = Assets::load_assets();
-
-    let mut rustris_config = Self {
-      world_data: game,
+    log::info!("Building config.");
+    let rustris_config = Self {
+      world_data,
       player_action: None,
       renderer,
       settings,
       input,
-      assets,
     };
 
-    rustris_config.load_fonts()?;
-
     Ok((rustris_config, event_loop, window))
-  }
-
-  fn load_fonts(&mut self) -> anyhow::Result<()> {
-    self
-      .assets
-      .font_assets()
-      .iter()
-      .try_for_each(|(font_name, font_bytes)| {
-        self.renderer.load_font_from_bytes(font_bytes, font_name)
-      })
   }
 
   pub fn run(self, event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()> {
@@ -126,7 +112,7 @@ impl RustrisConfig {
     if let Err(error) = game_loop
       .game
       .world_data
-      .render(&game_loop.game.assets, &mut game_loop.game.renderer)
+      .render(&mut game_loop.game.renderer)
     {
       log::error!("Failed to render the game world: `{:?}`", error);
     }
@@ -219,3 +205,6 @@ fn get_primary_monitor_dimensions(event_loop: &EventLoop<()>) -> PhysicalSize<u3
 
   primary_monitor.size()
 }
+
+#[cfg(test)]
+mod tests {}
