@@ -25,7 +25,24 @@ impl MenuItem {
 ///
 /// Each item will have a way to convert into the name of its button asset.
 pub trait MenuItemData {
+  /// The assigned name of a menu. Intended for use of storage in a map.
   const MENU_NAME: &'static str;
+
+  /// The center position of a menu.
+  /// When rendering each menu item, the y will be starting from the top of the asset.
+  /// The x will be the the center of the asset.
+  ///
+  /// Say you place your menu at (10, 10), and you have an asset of size 10x10.
+  /// When rendering, the top of that asset will start at y = 10.
+  /// The far left of the asset will start at x - (asset_width / 2) = 5, centering it.
+  ///
+  /// # Note
+  ///
+  /// Text boxes will ignore this rule.
+  const POSITION: winit::dpi::LogicalPosition<u32>;
+
+  /// When placing each item in a menu, this determines how many pixels separate each item.
+  const ITEM_OFFSET: u32;
 
   /// Gets the name of an individual menu item.
   fn item_name(&self) -> &'static str {
@@ -47,6 +64,13 @@ pub trait MenuItemData {
   /// Returns the list of every possible menu item in order, converted into [`MenuItem`](MenuItem)s
   fn full_list() -> Vec<MenuItem>;
 
+  /// Creates self from Self::item_name.
+  ///
+  /// None is returned if the name doesn't match any names in the menu.
+  fn from_name(name: &'static str) -> Option<Self>
+  where
+    Self: Sized;
+
   /// Converts an instance of [`MenuItem`](MenuItem) into Self.
   ///
   /// None is returned if the name of the MenuItem does not match any item_names under Self.
@@ -65,34 +89,53 @@ pub trait MenuItemData {
 /// use rustris::menus::menu_data::*;
 ///
 /// define_menu_items! {
+///   pub const POSITION = LogicalPosition { x: 0, y: 0 };
+///   pub const ITEM_OFFSET = 5;
+///
+/// // This will expand into creating the enum and implementing [`MenuItemData`](MenuItemData) and Into<[`MenuItem`](MenuItem)>,
+/// // MenuItemData will allow for each item in the enum to have methods for obtaining the item's
+/// // name and the name of its corresponding asset.
+/// // Into<[`MenuItem`](MenuItem)> Will allow for the creation of a [`Menu`](crate::menus::menu_data::Menu).
 ///   pub enum MainMenu {
 ///     Start(item_name = "start", asset_name = "menu_start"),
 ///     Settings(item_name = "settings", asset_name = "menu_settings"),
 ///     Exit(item_name = "exit", asset_name = "menu_exit"),
 ///   }
 /// }
+///
+/// // The actual code for this is commented as the assets do not exist in this example.
+///
+/// // Actually creating the menu:
+/// // let main_menu = Menu::new::<MainMenu>().unwrap();
+///
+/// // let mut menu_list: std::collections::HashMap<&'static str, Menu> = std::collections::HashMap::new();
+///
+/// // To uniquely store an instance of your menu items, you can use the following:
+/// // menu_list.insert(MainMenu::MENU_NAME, main_menu);
 /// ```
 ///
-/// This will expand into creating the enum and implementing [`MenuItemData`](MenuItemData) and Into<[`MenuItem`](MenuItem)>,
-/// MenuItemData will allow for each item in the enum to have methods for obtaining the item's
-/// name and the name of its corresponding asset.
-/// Into<[`MenuItem`](MenuItem)> Will allow for the creation of a [`Menu`](crate::menus::menu_data::Menu).
+/// # Constants
 ///
-/// Creating a menu will end up looking like this:
+/// ## Position
 ///
-/// ```ignore,no_run
-/// let main_menu = Menu::new::<MainMenu>();
-/// ```
+/// The center position of a menu.
+/// When rendering each menu item, the y will be starting from the top of the asset.
+/// The x will be the the center of the asset.
 ///
-/// To uniquely store an instance of your menu items, you can use the following:
-/// ```ignore,no_run
-/// let mut menu_list: std::collections::HashMap<&'static str, Menu> = std::collections::HashMap::new();
+/// Say you place your menu at (10, 10), and you have an asset of size 10x10.
+/// When rendering, the top of that asset will start at y = 10.
+/// The far left of the asset will start at x - (asset_width / 2) = 5, centering it.
 ///
-/// menu_list.insert(MainMenu::MENU_NAME, main_menu);
-/// ```
+/// ## Item Offset
+///
+/// When placing each item in a menu, this determines how many pixels separate each item.
+
 #[macro_export]
 macro_rules! define_menu_items {
   {
+    pub const POSITION = LogicalPosition { x: $x:expr, y: $y:expr$(,)? };
+    pub const ITEM_OFFSET = $item_offset:expr;
+
     pub enum $name:ident {
       $($variant:ident ( item_name = $name_value:literal, asset_name = $asset_value:literal ) ),* $(,)?
     }
@@ -104,6 +147,8 @@ macro_rules! define_menu_items {
 
     impl $crate::menus::menu_items::MenuItemData for $name {
       const MENU_NAME: &'static str = stringify!($name);
+      const POSITION: winit::dpi::LogicalPosition<u32> = winit::dpi::LogicalPosition::new($x, $y);
+      const ITEM_OFFSET: u32 = $item_offset;
 
       fn item_name(&self) -> &'static str {
         match &self {
@@ -135,12 +180,15 @@ macro_rules! define_menu_items {
         ]
       }
 
+      fn from_name(name: &'static str) -> Option<Self> {
+        match name {
+          $($name_value => Some($name::$variant),)*
+          _ => None
+        }
+      }
+
       fn from_menu_item(item: &$crate::menus::menu_items::MenuItem) -> Option<$name> {
-        [
-          $($name::$variant),*,
-        ]
-        .into_iter()
-        .find(|menu_item| menu_item.item_name() == item.item_name())
+        Self::from_name(item.item_name())
       }
     }
 
@@ -159,14 +207,6 @@ macro_rules! define_menu_items {
         menu_item.item_name()
       }
     }
-
-    impl From<$name> for &'static str {
-      fn from(menu_item: $name) -> &'static str {
-        use $crate::menus::menu_items::MenuItemData;
-        menu_item.item_name()
-      }
-    }
-
   };
 }
 
@@ -203,6 +243,9 @@ mod tests {
     use crate::define_menu_items;
 
     define_menu_items! {
+      pub const POSITION = LogicalPosition { x: 0, y: 0 };
+      pub const ITEM_OFFSET = 20;
+
       pub enum TestMenu {
         Start(item_name = "start", asset_name = "start_asset"),
         Options(item_name = "options", asset_name = "options_asset"),

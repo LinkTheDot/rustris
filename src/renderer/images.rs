@@ -1,7 +1,7 @@
 use crate::renderer::{renderable::Renderable, Renderer};
 use anyhow::anyhow;
 use image::DynamicImage;
-use winit::dpi::LogicalPosition;
+use winit::dpi::{LogicalPosition, LogicalSize};
 
 impl Renderable for DynamicImage {
   fn render(
@@ -10,8 +10,12 @@ impl Renderable for DynamicImage {
     position: &LogicalPosition<u32>,
     _color: &[u8; 4],
   ) -> anyhow::Result<()> {
-    let image_width = self.width();
-    let image_height = self.height();
+    // let image_width = self.width();
+    // let image_height = self.height();
+    let LogicalSize {
+      width: image_width,
+      height: image_height,
+    } = self.dimensions();
 
     let Some(image_buffer) = self.as_rgba8() else {
       return Err(anyhow!("Failed to read image as rgba8 when rendering."));
@@ -30,5 +34,12 @@ impl Renderable for DynamicImage {
     }
 
     Ok(())
+  }
+
+  fn dimensions(&self) -> LogicalSize<u32> {
+    LogicalSize {
+      width: self.width(),
+      height: self.height(),
+    }
   }
 }

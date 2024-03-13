@@ -1,5 +1,5 @@
 use crate::renderer::Renderer;
-use winit::dpi::LogicalPosition;
+use winit::dpi::*;
 
 pub trait Renderable {
   fn render(
@@ -8,4 +8,6 @@ pub trait Renderable {
     position: &LogicalPosition<u32>,
     color: &[u8; 4],
   ) -> anyhow::Result<()>;
+
+  fn dimensions(&self) -> LogicalSize<u32>;
 }

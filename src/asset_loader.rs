@@ -42,9 +42,6 @@ static FONT_NAMES: OnceLock<Vec<&'static str>> = OnceLock::new();
 /// The map of images to be initialized on first call.
 static IMAGES: OnceLock<HashMap<&'static str, DynamicImage>> = OnceLock::new();
 
-// TODO: Figure out where to put this. It's not an asset.
-// static TEXTS_BOXES: OnceLock<HashMap<&'static str, DynamicImage>> = OnceLock::new();
-
 pub struct Assets;
 
 pub enum AssetType {

@@ -173,10 +173,6 @@ impl TextBox {
     self.layout.height().cast()
   }
 
-  pub fn dimensions(&self) -> &LogicalSize<u32> {
-    &self.dimensions
-  }
-
   fn calculate_dimensions(
     glyphs: &[GlyphPosition<()>],
     position: &LogicalPosition<u32>,
@@ -210,10 +206,14 @@ impl TextBox {
 
 impl Renderable for TextBox {
   /// Renders the text for the given [`TextBox`](crate::renderer::fonts::TextBox).
+  ///
+  /// The input positin is used as an offset from the assigned position of the textbox.
+  /// Meaning, if the textbox was created to be placed at (10, 10). Passing in (1, 1) will render
+  /// the text box at position (11, 11).
   fn render(
     &self,
     renderer: &mut Renderer,
-    _position: &LogicalPosition<u32>,
+    offset: &LogicalPosition<u32>,
     color: &[u8; 4],
   ) -> anyhow::Result<()> {
     let Some(font_index) = self.font_index() else {
@@ -233,6 +233,7 @@ impl Renderable for TextBox {
     let buffer = renderer.pixels.frame_mut();
     let text_box_y = self.position().y;
     let text_box_height = self.dimensions().height;
+    let offset = offset.x + (offset.y * renderer.buffer_dimensions.width);
 
     let result: anyhow::Result<()> = self.glyphs().iter().try_for_each(|glyph| {
       if !glyph.parent.is_ascii() {
@@ -254,7 +255,8 @@ impl Renderable for TextBox {
       for index in 0..(char_width * char_height) {
         let position = top_left_placement
           + (index % char_width)
-          + ((index / char_width) * renderer.buffer_dimensions.width);
+          + ((index / char_width) * renderer.buffer_dimensions.width)
+          + offset;
 
         let shade_percentage = (bitmap[index as usize] as u16 * 100) / 255;
 
@@ -280,6 +282,10 @@ impl Renderable for TextBox {
     }
 
     Ok(())
+  }
+
+  fn dimensions(&self) -> LogicalSize<u32> {
+    self.dimensions
   }
 }
 

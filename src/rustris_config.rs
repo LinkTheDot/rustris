@@ -50,7 +50,7 @@ impl RustrisConfig {
     let input = WinitInputHelper::new();
 
     let renderer = Renderer::new(pixels, RENDERED_WINDOW_DIMENSIONS)?;
-    let world_data = WorldData::new();
+    let world_data = WorldData::new()?;
 
     log::info!("Building config.");
     let rustris_config = Self {
@@ -83,16 +83,21 @@ impl RustrisConfig {
   }
 
   fn update_game(game_loop: &mut GameLoop<Self, Time, Arc<Window>>) {
-    if let Err(error) = game_loop
+    let result = game_loop
       .game
       .world_data
-      .update_world(game_loop.game.player_action.clone())
-    {
-      log::error!("An error occurred when updating the world: {:?}", error);
+      .update_world(game_loop.game.player_action.clone());
 
-      game_loop.exit();
+    match result {
+      Ok(true) => game_loop.exit(),
+      Err(error) => {
+        log::error!("An error occurred when updating the world: {:?}", error);
 
-      return;
+        game_loop.exit();
+
+        return;
+      }
+      _ => {}
     }
 
     if game_loop.game.settings.fps() != game_loop.updates_per_second {
@@ -112,7 +117,7 @@ impl RustrisConfig {
     if let Err(error) = game_loop
       .game
       .world_data
-      .render(&mut game_loop.game.renderer)
+      .render(&mut game_loop.game.renderer, &game_loop.game.settings)
     {
       log::error!("Failed to render the game world: `{:?}`", error);
     }
@@ -184,7 +189,8 @@ impl RustrisConfig {
 
       let keys_pressed: Vec<KeyCode> = TEMP_VALID_KEYS
         .iter()
-        .filter_map(|key| input.key_pressed(*key).then_some(*key))
+        .copied()
+        .filter(|key| input.key_pressed(*key) | input.key_held(*key))
         .collect();
 
       let player_action = PlayerAction::from((world_state, keys_pressed));

@@ -1,6 +1,9 @@
-use super::actions::{MenuAction, PlayerAction};
 use super::minos::MinoType;
+use crate::game::actions::{MenuAction, PlayerAction};
+use crate::game::game_settings::GameSettings;
+use crate::game::timer::Timer;
 use crate::game::world_state::*;
+use crate::get_renderable_from_name;
 use crate::menus::menu_data::*;
 use crate::menus::templates::{game_settings::*, main_menu::*};
 use crate::renderer::text_boxes::TextBox;
@@ -9,7 +12,11 @@ use crate::rustris_config::RENDERED_WINDOW_DIMENSIONS;
 use anyhow::anyhow;
 use maplit::hashmap;
 use std::collections::HashMap;
+use std::sync::OnceLock;
+use std::time::Duration;
 use winit::dpi::*;
+
+static TEXT_BOXES: OnceLock<HashMap<&'static str, TextBox>> = OnceLock::new();
 
 #[allow(unused)]
 #[derive(Debug)]
@@ -18,53 +25,84 @@ pub struct WorldData {
 
   held: Option<MinoType>,
   /// Contains the list of filled squares and the piece that occupies them.
+  ///
+  /// Size is [`logical_width`](WorldData::LOGICAL_BOARD_WIDTH) * [`logical_height`](WorldData::LOGICAL_BOARD_HEIGHT)
   board: Vec<Option<MinoType>>,
 
   current_menu: Option<&'static str>,
   menus: HashMap<&'static str, Menu>,
-  text_boxes: HashMap<&'static str, TextBox>,
+
+  timers: HashMap<&'static str, Timer>,
 }
 
 impl WorldData {
+  /// The width of the board when calculating game interactions.
   pub const LOGICAL_BOARD_WIDTH: u32 = 10;
+  /// The height of the board when calculating game interactions.
   pub const LOGICAL_BOARD_HEIGHT: u32 = 40;
+
+  /// The width of the board when rendering it.
   pub const VISIBLE_BOARD_WIDTH: u32 = 10;
+  /// The height of the board when rendering it.
   pub const VISIBLE_BOARD_HEIGHT: u32 = 20;
 
   #[allow(clippy::new_without_default)]
-  pub fn new() -> Self {
+  pub fn new() -> anyhow::Result<Self> {
     log::info!("Creating world data.");
 
-    let menus = Self::load_menus();
-    let text_boxes = Self::load_text_boxes();
+    let menus = Self::load_menus()?;
+    let timers = HashMap::new();
 
-    Self {
+    Ok(Self {
       current_state: WorldState::Menu,
 
       held: None,
       board: vec![None; Self::LOGICAL_BOARD_WIDTH as usize * Self::LOGICAL_BOARD_HEIGHT as usize],
 
-      current_menu: Some(MainMenuItems::MENU_NAME),
+      current_menu: Some(MainMenu::MENU_NAME),
       menus,
-      text_boxes,
-    }
+
+      timers,
+    })
   }
 
-  fn load_menus() -> HashMap<&'static str, Menu> {
-    hashmap! {
-      MainMenuItems::MENU_NAME => Menu::new::<MainMenuItems>(),
-      GeneralSettingsMenuItems::MENU_NAME => Menu::new::<GeneralSettingsMenuItems>(),
-      GameControlsMenuItems::MENU_NAME => Menu::new::<GameControlsMenuItems>(),
-      MenuControlsMenuItems::MENU_NAME => Menu::new::<MenuControlsMenuItems>(),
-
-    }
+  fn load_menus() -> anyhow::Result<HashMap<&'static str, Menu>> {
+    Ok(hashmap! {
+      MainMenu::MENU_NAME => Menu::new::<MainMenu>()?,
+      GeneralSettingsMenu::MENU_NAME => Menu::new::<GeneralSettingsMenu>()?,
+      GameControlsMenu::MENU_NAME => Menu::new::<GameControlsMenu>()?,
+      MenuControlsMenu::MENU_NAME => Menu::new::<MenuControlsMenu>()?,
+    })
   }
 
-  fn load_text_boxes() -> HashMap<&'static str, TextBox> {
+  pub fn get_text_boxes() -> &'static HashMap<&'static str, TextBox> {
+    TEXT_BOXES.get_or_init(WorldData::initialize_text_boxes)
+  }
+
+  /// Gets the timer of the given name.
+  ///
+  /// If it doesn't exist, it's initialized with the passed in duration.
+  ///
+  /// If the name and duration don't exist, 10 seconds is defaulted as the timer.
+  pub fn get_or_init_timer(&mut self, name: &'static str, duration: Option<Duration>) -> &Timer {
+    let duration = duration.unwrap_or(Duration::from_secs(10));
+
+    self.timers.entry(name).or_insert(Timer::new(duration))
+  }
+
+  /// Gets the timer of the given name.
+  ///
+  /// None is returned if the timer doesn't exist.
+  /// Use [`.get_or_init_timer()`](WorldData::get_or_init_timer) for creating a timer.
+  pub fn get_timer(&self, name: &'static str) -> Option<&Timer> {
+    self.timers.get(name)
+  }
+
+  fn initialize_text_boxes() -> HashMap<&'static str, TextBox> {
     let mut text_boxes = HashMap::new();
-    let general_settings = GeneralSettingsMenuItems::create_text_boxes();
-    let game_controls = GameControlsMenuItems::create_text_boxes();
-    let menu_controls = MenuControlsMenuItems::create_text_boxes();
+    let general_settings = GeneralSettingsMenu::create_text_boxes();
+    let game_controls = GameControlsMenu::create_text_boxes();
+    let menu_controls = MenuControlsMenu::create_text_boxes();
 
     general_settings
       .into_iter()
@@ -93,25 +131,46 @@ impl WorldData {
       return Ok(false);
     };
 
-    let current_menu = self.current_menu_mut()?;
+    log::debug!("Action taken: {:?}", player_action);
 
-    match current_menu.name() {
-      "main_menu" => match player_action {
-        MenuAction::Up => current_menu.previous(),
-        MenuAction::Down => current_menu.next(),
+    let current_menu_name = self.current_menu()?.name();
+
+    match current_menu_name {
+      MainMenu::MENU_NAME => match player_action {
+        MenuAction::Up | MenuAction::Down => {
+          let timer = self.get_or_init_timer("menu_movement", Some(Duration::from_millis(200)));
+
+          if timer.is_finished() || !timer.running() {
+            timer.start();
+
+            match player_action {
+              MenuAction::Up => self.current_menu_mut()?.previous(),
+              MenuAction::Down => self.current_menu_mut()?.next(),
+              _ => (),
+            }
+          }
+        }
+
         MenuAction::Select => {
-          let Some(current_option) = current_menu.current_option() else {
+          let Some(current_option) = self.current_menu()?.current_option() else {
             return Err(anyhow!(
               "The current menu, `{}`, has no options.",
-              current_menu.name()
+              current_menu_name
             ));
           };
 
-          match current_option.item_name() {
-            "start" => self.update_state(WorldState::Game),
-            "options" => self.current_menu = Some("options_menu"),
-            "exit" => return Ok(true),
-            _ => (),
+          let Some(current_option_item) = MainMenu::from_name(current_option.item_name()) else {
+            return Err(anyhow!(
+              "Current option {:?} has an invalid menu item name {:?}",
+              current_menu_name,
+              current_option
+            ));
+          };
+
+          match current_option_item {
+            MainMenu::Start => self.update_state(WorldState::Game),
+            MainMenu::Options => self.current_menu = Some("options_menu"), // Change this to not a string literal
+            MainMenu::Exit => return Ok(true),
           }
         }
         _ => (),
@@ -124,7 +183,11 @@ impl WorldData {
       "pause_menu" => {
         todo!()
       }
-      _ => (),
+      _ => {
+        log::error!("Unknown menu labeled in the game config, going back to main menu.");
+
+        self.current_menu = Some(MainMenu::MENU_NAME);
+      }
     }
 
     Ok(false)
@@ -134,14 +197,18 @@ impl WorldData {
     Ok(())
   }
 
-  pub fn render(&self, renderer: &mut Renderer) -> anyhow::Result<()> {
+  pub fn render(
+    &self,
+    renderer: &mut Renderer,
+    game_settings: &GameSettings,
+  ) -> anyhow::Result<()> {
     match self.current_state {
       WorldState::Menu => {
         let current_menu_name = self.current_menu.unwrap_or("main_menu");
 
         match current_menu_name {
-          MainMenuItems::MENU_NAME => self.render_main_menu(renderer)?,
-          "options template" => self.render_options(renderer)?,
+          MainMenu::MENU_NAME => self.render_main_menu(renderer)?,
+          "options template" => self.render_options(renderer, game_settings)?,
           "pause_menu template" => {
             self.render_game(renderer)?;
 
@@ -170,32 +237,18 @@ impl WorldData {
   fn render_main_menu(&self, renderer: &mut Renderer) -> anyhow::Result<()> {
     draw_background_gradiant(renderer)?;
 
-    let menu_position = LogicalPosition {
-      x: 0,
-      y: (RENDERED_WINDOW_DIMENSIONS.height as f32 * 0.25).cast::<i32>(),
-    };
-    let option_spacing = 20; // pixels.
     let current_menu = self.current_menu()?;
 
-    #[allow(unused_labels)]
-    'temp_testing: {
-      let end_position = LogicalPosition::new(100, 50);
-      let length = 30;
-      let point_right = true;
-      let color = [0xFF; 4];
+    current_menu.render(renderer, None)?;
 
-      renderer.draw_arrow(&end_position, length, point_right, &color)?;
-
-      // TODO!(): Drawing an arrow at the position of the selected menu item
-      // let current_selected = current_menu.asset_name_at_index(current_menu.cursor_position());
-      // let asset_position =
-      //   current_menu.asset_position_at_index(renderer, current_menu.cursor_position());
-    }
-
-    current_menu.render_with_images(&menu_position, renderer, option_spacing)
+    self.draw_menu_selection_indicator(renderer)
   }
 
-  fn render_options(&self, _renderer: &mut Renderer) -> anyhow::Result<()> {
+  fn render_options(
+    &self,
+    _renderer: &mut Renderer,
+    _game_settings: &GameSettings,
+  ) -> anyhow::Result<()> {
     todo!()
   }
 
@@ -245,6 +298,48 @@ impl WorldData {
       Some(menu) => Ok(menu),
       None => Err(anyhow!("Currently selected menu does not exist.")),
     }
+  }
+
+  pub fn draw_menu_selection_indicator(&self, renderer: &mut Renderer) -> anyhow::Result<()> {
+    let current_menu = self.current_menu()?;
+
+    let cursor_position = current_menu.cursor_position();
+
+    let Some(current_selected_asset_name) = current_menu.asset_name_at_index(cursor_position)
+    else {
+      return Err(anyhow!(
+        "Failed to get asset at index {} from menu {:?}",
+        cursor_position,
+        current_menu.name()
+      ));
+    };
+    let current_selected_asset_position = current_menu
+      .asset_position_at_index(cursor_position)
+      .unwrap();
+
+    let Some(current_selected_asset) = get_renderable_from_name(current_selected_asset_name) else {
+      return Err(anyhow!(
+        "Failed to get asset of name {:?}",
+        current_selected_asset_name
+      ));
+    };
+
+    let LogicalSize {
+      height: asset_height,
+      ..
+    } = current_selected_asset.dimensions();
+
+    let end_position = LogicalPosition {
+      x: current_selected_asset_position.x - 10,
+      y: current_selected_asset_position.y + (asset_height / 2),
+    };
+    let length = 20;
+    let point_right = true;
+    let color = [0xFF; 4];
+
+    renderer.draw_arrow(&end_position, length, point_right, &color)?;
+
+    Ok(())
   }
 }
 
