@@ -1,12 +1,8 @@
-use crate::asset_loader::Assets;
 use crate::game::{actions::*, game_settings::GameSettings, world_data::WorldData};
 use crate::general_data::winit_traits::*;
-use crate::renderer::fonts::TextBox;
 use crate::renderer::Renderer;
-use anyhow::anyhow;
 use game_loop::{game_loop, GameLoop, Time, TimeTrait};
 use pixels::{Pixels, SurfaceTexture};
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use winit::window::{Window, WindowBuilder};
@@ -19,10 +15,8 @@ pub struct RustrisConfig {
   world_data: WorldData,
   player_action: Option<PlayerAction>,
   renderer: Renderer,
-  text_boxes: HashMap<&'static str, TextBox>,
   settings: GameSettings,
   input: WinitInputHelper,
-  assets: Assets,
 }
 
 impl RustrisConfig {
@@ -51,52 +45,23 @@ impl RustrisConfig {
     )?;
 
     let settings = GameSettings::initialize()?;
+
+    log::info!("Creating WinitInputHelper.");
     let input = WinitInputHelper::new();
 
-    let game = WorldData::new();
-    let renderer = Renderer::new(pixels);
+    let renderer = Renderer::new(pixels, RENDERED_WINDOW_DIMENSIONS)?;
+    let world_data = WorldData::new()?;
 
-    let assets = Assets::load_assets();
-
-    let mut rustris_config = Self {
-      world_data: game,
+    log::info!("Building config.");
+    let rustris_config = Self {
+      world_data,
       player_action: None,
       renderer,
-      text_boxes: HashMap::with_capacity(5),
       settings,
       input,
-      assets,
     };
 
-    rustris_config.load_fonts()?;
-    rustris_config.load_default_text_boxes();
-
     Ok((rustris_config, event_loop, window))
-  }
-
-  fn load_fonts(&mut self) -> anyhow::Result<()> {
-    self
-      .assets
-      .font_assets()
-      .iter()
-      .try_for_each(|(font_name, font_bytes)| {
-        self.renderer.load_font_from_bytes(font_bytes, font_name)
-      })
-  }
-
-  /// Temporary until I think of a better way of doing this.
-  fn load_default_text_boxes(&mut self) {
-    let test_text_box_position = LogicalPosition::new(0, 0);
-    let test_text_box_name = "test";
-    let test_text_box = TextBox::new(
-      &self.renderer,
-      0,
-      "FOX FOX FOX",
-      &test_text_box_position,
-      32.0,
-    );
-
-    let _ = self.text_boxes.insert(test_text_box_name, test_text_box);
   }
 
   pub fn run(self, event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()> {
@@ -118,16 +83,21 @@ impl RustrisConfig {
   }
 
   fn update_game(game_loop: &mut GameLoop<Self, Time, Arc<Window>>) {
-    if let Err(error) = game_loop
+    let result = game_loop
       .game
       .world_data
-      .update_world(game_loop.game.player_action.clone())
-    {
-      log::error!("An error occurred when updating the world: {:?}", error);
+      .update_world(game_loop.game.player_action.clone());
 
-      game_loop.exit();
+    match result {
+      Ok(true) => game_loop.exit(),
+      Err(error) => {
+        log::error!("An error occurred when updating the world: {:?}", error);
 
-      return;
+        game_loop.exit();
+
+        return;
+      }
+      _ => {}
     }
 
     if game_loop.game.settings.fps() != game_loop.updates_per_second {
@@ -147,7 +117,7 @@ impl RustrisConfig {
     if let Err(error) = game_loop
       .game
       .world_data
-      .render(&game_loop.game.assets, &mut game_loop.game.renderer)
+      .render(&mut game_loop.game.renderer, &game_loop.game.settings)
     {
       log::error!("Failed to render the game world: `{:?}`", error);
     }
@@ -219,7 +189,8 @@ impl RustrisConfig {
 
       let keys_pressed: Vec<KeyCode> = TEMP_VALID_KEYS
         .iter()
-        .filter_map(|key| input.key_pressed(*key).then_some(*key))
+        .copied()
+        .filter(|key| input.key_pressed(*key) | input.key_held(*key))
         .collect();
 
       let player_action = PlayerAction::from((world_state, keys_pressed));
@@ -240,3 +211,6 @@ fn get_primary_monitor_dimensions(event_loop: &EventLoop<()>) -> PhysicalSize<u3
 
   primary_monitor.size()
 }
+
+#[cfg(test)]
+mod tests {}
